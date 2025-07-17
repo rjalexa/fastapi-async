@@ -3,23 +3,21 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "asynctaskflow-api"
+name = "asynctaskflow-worker"
 version = "0.1.0"
-description = "FastAPI service for AsyncTaskFlow"
+description = "Celery worker service for AsyncTaskFlow"
 authors = [
     {name = "Bob Alexander", email = "gogonegro@gmail.com"}
 ]
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
+    "celery>=5.3.0",
     "redis>=5.0.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "httpx>=0.25.0",
-    "python-multipart>=0.0.6",
-    "celery>=5.3.0",
+    "pybreaker>=1.0.2",
 ]
 
 [project.optional-dependencies]

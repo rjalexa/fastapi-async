@@ -1,6 +1,7 @@
 """Health check API endpoints."""
 
-from fastapi import APIRouter, HTTPException, status
+from datetime import datetime
+from fastapi import APIRouter, HTTPException, Request, status
 
 from schemas import HealthStatus
 from services import health_service
@@ -8,58 +9,190 @@ from services import health_service
 router = APIRouter(tags=["health"])
 
 
+def get_health_service(request: Request):
+    """Get health service from global variable or app state."""
+    # Try global service first
+    if health_service:
+        return health_service
+
+    # Fallback to app state (for reload mode)
+    return getattr(request.app.state, "health_service", None)
+
+
 @router.get("/health", response_model=HealthStatus)
-async def health_check() -> HealthStatus:
+async def health_check(request: Request) -> HealthStatus:
     """
     Comprehensive health check endpoint.
 
     Checks the status of:
     - Redis connectivity
     - Celery workers
-    - Circuit breaker status
 
     Returns overall system health and component-specific status.
+    Always returns 200 with status details, never raises exceptions.
+
+    Note: Circuit breaker status is available at /health/workers
     """
-    if not health_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Health service not available",
+    current_health_service = get_health_service(request)
+
+    if not current_health_service:
+        return HealthStatus(
+            status="unhealthy",
+            components={
+                "redis": False,
+                "workers": False,
+                "reason": "Health service not initialized",
+            },
+            timestamp=datetime.utcnow(),
         )
 
     try:
-        health_data = await health_service.check_health()
+        health_data = await current_health_service.check_health()
         return HealthStatus(**health_data)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Health check failed: {str(e)}",
+        return HealthStatus(
+            status="unhealthy",
+            components={
+                "redis": False,
+                "workers": False,
+                "error": str(e),
+            },
+            timestamp=datetime.utcnow(),
         )
 
 
 @router.get("/ready")
-async def readiness_check() -> dict:
+async def readiness_check(request: Request) -> dict:
     """
     Kubernetes-style readiness check.
 
     Returns 200 if the service is ready to accept traffic.
+    Returns 503 if not ready (dependencies down, service not initialized).
+
+    Used by load balancers to determine if traffic should be routed here.
     """
-    if not health_service:
-        return {"status": "not ready", "reason": "Health service not available"}
+    current_health_service = get_health_service(request)
+
+    if not current_health_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not ready", "reason": "Health service not initialized"},
+        )
 
     try:
-        health_data = await health_service.check_health()
+        health_data = await current_health_service.check_health()
         if health_data["status"] == "healthy":
             return {"status": "ready"}
         else:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Service not ready",
+                detail={
+                    "status": "not ready",
+                    "reason": "Dependencies unhealthy",
+                    "components": health_data["components"],
+                },
             )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Readiness check failed: {str(e)}",
+            detail={"status": "not ready", "reason": f"Health check failed: {str(e)}"},
         )
+
+
+@router.get("/health/workers")
+async def worker_health_check() -> dict:
+    """
+    Get detailed health from all workers including their circuit breaker status.
+
+    Queries each worker directly for their internal circuit breaker state.
+    """
+    try:
+        # Import the celery app from the API main module
+        try:
+            from main import celery_app
+        except ImportError:
+            return {
+                "error": "Cannot connect to worker application - workers may not be running",
+                "total_workers": 0,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        # Send task to all workers to get their health
+        job = celery_app.send_task("get_worker_health")
+
+        # Get result with timeout
+        try:
+            worker_results = job.get(timeout=5.0)
+            if not isinstance(worker_results, list):
+                worker_results = [worker_results]
+        except Exception as e:
+            return {
+                "error": f"Failed to get worker responses: {str(e)}",
+                "total_workers": 0,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+        # Aggregate results
+        total_workers = len(worker_results)
+        healthy_workers = sum(1 for w in worker_results if w.get("status") == "healthy")
+
+        circuit_breaker_states = {}
+        for worker in worker_results:
+            cb_state = worker.get("circuit_breaker", {}).get("state", "unknown")
+            circuit_breaker_states[cb_state] = (
+                circuit_breaker_states.get(cb_state, 0) + 1
+            )
+
+        return {
+            "total_workers": total_workers,
+            "healthy_workers": healthy_workers,
+            "circuit_breaker_states": circuit_breaker_states,
+            "worker_details": worker_results,
+            "overall_status": "healthy"
+            if healthy_workers == total_workers
+            else "degraded",
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "total_workers": 0,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
+@router.post("/health/workers/reset-circuit-breaker")
+async def reset_all_circuit_breakers() -> dict:
+    """
+    Reset circuit breakers on all workers.
+
+    Useful for manual recovery after resolving external service issues.
+    """
+    try:
+        from main import celery_app
+
+        # Send reset task to all workers
+        job = celery_app.send_task("reset_worker_circuit_breaker")
+
+        try:
+            results = job.get(timeout=5.0)
+            if not isinstance(results, list):
+                results = [results]
+        except Exception:
+            results = []
+
+        successful_resets = sum(1 for r in results if r.get("status") == "success")
+
+        return {
+            "message": f"Reset attempted on {len(results)} workers",
+            "successful_resets": successful_resets,
+            "results": results,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        return {"error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
 
 @router.get("/live")
@@ -67,6 +200,10 @@ async def liveness_check() -> dict:
     """
     Kubernetes-style liveness check.
 
-    Returns 200 if the service is alive (basic functionality).
+    Returns 200 if the service process is alive and responding.
+    Should only return 503/5xx if the process should be restarted.
+
+    This is a basic "is the web server responding" check.
+    Used by Kubernetes to determine if the pod should be restarted.
     """
-    return {"status": "alive"}
+    return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}

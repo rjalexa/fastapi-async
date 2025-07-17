@@ -63,6 +63,7 @@ class HealthStatus(BaseModel):
 
     status: str = Field(..., description="Overall health status")
     components: Dict[str, Any] = Field(..., description="Component health status")
+    note: Optional[str] = Field(None, description="Additional health information")
     timestamp: datetime = Field(..., description="Health check timestamp")
 
 

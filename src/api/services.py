@@ -250,8 +250,8 @@ class HealthService:
             "components": {
                 "redis": redis_ok,
                 "workers": workers_ok,
-                "circuit_breaker": "unknown",  # Will be implemented later
             },
+            "note": "Use /health/workers for detailed circuit breaker status",
             "timestamp": datetime.utcnow(),
         }
 

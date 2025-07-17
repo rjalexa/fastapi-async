@@ -1,62 +1,92 @@
-"""FastAPI application main module."""
+"""FastAPI application entry point."""
 
-import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from celery import Celery
 
 from config import settings
-from routers import health, queues, tasks
-from services import (
-    HealthService,
-    QueueService,
-    RedisService,
-    TaskService,
-)
+from routers import health, tasks, queues
+from services import RedisService, TaskService, QueueService, HealthService
+import services  # Import the module to modify globals
 
-# Configure logging
-logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
-logger = logging.getLogger(__name__)
 
-# Initialize Celery app
+# Create Celery app
 celery_app = Celery(
     "asynctaskflow",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
+    include=["tasks"],  # Make sure this points to your worker tasks
 )
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager."""
-    # Startup
-    logger.info("Starting AsyncTaskFlow API...")
+async def initialize_services() -> tuple:
+    """Initialize all services and return them."""
+    print(f"Initializing services in process {os.getpid()}")
 
-    # Initialize services
-    global redis_service, task_service, queue_service, health_service
-
+    # Initialize Redis service
     redis_service = RedisService(settings.redis_url)
+
+    # Test Redis connection
+    redis_ok = await redis_service.ping()
+    print(f"Redis connection: {'OK' if redis_ok else 'FAILED'}")
+
+    if not redis_ok:
+        print("⚠️  Redis connection failed, but continuing...")
+
+    # Initialize other services
     task_service = TaskService(redis_service)
     queue_service = QueueService(redis_service)
     health_service = HealthService(redis_service, celery_app)
 
-    # Set celery app in tasks router
-    tasks.celery_app = celery_app
+    return redis_service, task_service, queue_service, health_service
 
-    logger.info("Services initialized successfully")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events."""
+    # Startup
+    print("🚀 Starting AsyncTaskFlow API...")
+    print(f"Redis URL: {settings.redis_url}")
+    print(f"Debug mode: {settings.debug}")
+
+    try:
+        # Initialize services
+        redis_svc, task_svc, queue_svc, health_svc = await initialize_services()
+
+        # Set global variables
+        services.redis_service = redis_svc
+        services.task_service = task_svc
+        services.queue_service = queue_svc
+        services.health_service = health_svc
+
+        # Also store in app state (fallback for reload mode)
+        app.state.redis_service = redis_svc
+        app.state.task_service = task_svc
+        app.state.queue_service = queue_svc
+        app.state.health_service = health_svc
+
+        print("✅ All services initialized successfully")
+
+    except Exception as e:
+        print(f"❌ Failed to initialize services: {e}")
+        # Don't raise - let the app start but mark services as unavailable
+        services.redis_service = None
+        services.task_service = None
+        services.queue_service = None
+        services.health_service = None
 
     yield
 
     # Shutdown
-    logger.info("Shutting down AsyncTaskFlow API...")
-    if redis_service:
-        await redis_service.close()
-    logger.info("Cleanup completed")
+    print("🧹 Cleaning up services...")
+    if services.redis_service:
+        await services.redis_service.close()
+    print("✅ Services cleaned up")
 
 
-# Create FastAPI app
+# Create FastAPI application
 app = FastAPI(
     title=settings.api_title,
     description=settings.api_description,
@@ -66,40 +96,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Include routers
 app.include_router(health.router)
-app.include_router(tasks.router)
-app.include_router(queues.router)
+app.include_router(tasks.router, prefix="/api/v1")
+app.include_router(queues.router, prefix="/api/v1")
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
+    """Root endpoint."""
     return {
-        "name": settings.api_title,
+        "message": "AsyncTaskFlow API",
         "version": settings.api_version,
-        "description": settings.api_description,
-        "docs_url": settings.docs_url,
-        "health_url": "/health",
+        "docs": "/docs",
+        "health": "/health",
     }
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.debug,
-        log_level=settings.log_level.lower(),
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=settings.debug)

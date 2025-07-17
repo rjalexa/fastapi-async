@@ -25,6 +25,7 @@ services:
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL}
       - OPENROUTER_TIMEOUT=${OPENROUTER_TIMEOUT}
+      - DEBUG=${DEBUG:-true}
     depends_on:
       redis:
         condition: service_healthy

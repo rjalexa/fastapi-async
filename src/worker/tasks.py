@@ -3,15 +3,19 @@
 import json
 import random
 import time
+import os
 from datetime import datetime
 from typing import Optional
 
-import httpx
 import redis
-from celery import Task
+from celery import Celery, Task
 from celery.exceptions import Retry
 
-from circuit_breaker import circuit_breaker
+from circuit_breaker import (
+    call_openrouter_api,
+    get_circuit_breaker_status,
+    reset_circuit_breaker,
+)
 from config import settings
 
 
@@ -33,10 +37,11 @@ class PermanentError(TaskError):
     pass
 
 
-# Error classification mapping
+# Error classification mapping (Updated for OpenRouter)
 ERROR_CLASSIFICATIONS = {
-    400: PermanentError,  # Bad Request
-    401: PermanentError,  # Unauthorized
+    400: PermanentError,  # Bad Request (invalid params, CORS)
+    401: PermanentError,  # Invalid credentials (API key issues)
+    402: TransientError,  # Insufficient credits (can be topped up)
     403: PermanentError,  # Forbidden
     404: PermanentError,  # Not Found
     429: TransientError,  # Rate Limited
@@ -46,13 +51,25 @@ ERROR_CLASSIFICATIONS = {
     504: TransientError,  # Gateway Timeout
 }
 
-# Retry schedules by error type
+# Retry schedules by error type (Updated for OpenRouter)
 RETRY_SCHEDULES = {
+    "InsufficientCredits": [300, 600, 1800],  # 5min, 10min, 30min - time to add credits
     "RateLimitError": [60, 120, 300, 600],  # Start with 1 minute
     "ServiceUnavailable": [5, 10, 30, 60, 120],  # Quick initial retry
     "NetworkTimeout": [2, 5, 10, 30, 60],  # Standard backoff
+    "ModelWarmup": [30, 60, 120, 300],  # Model warm-up times (few seconds to minutes)
+    "ProviderError": [10, 30, 60, 180],  # Provider-specific issues
+    "ContentFilter": [0],  # Don't retry content moderation issues
     "Default": [5, 15, 60, 300],  # Generic schedule
 }
+
+
+# Create Celery app
+app = Celery(
+    "asynctaskflow-worker",
+    broker=settings.celery_broker_url,
+    backend=settings.celery_result_backend,
+)
 
 
 def get_redis_connection() -> redis.Redis:
@@ -61,11 +78,13 @@ def get_redis_connection() -> redis.Redis:
 
 
 def classify_error(status_code: int, error_message: str) -> str:
-    """Classify error as transient or permanent."""
+    """Classify error as transient or permanent with OpenRouter-specific logic."""
     if status_code in ERROR_CLASSIFICATIONS:
         error_class = ERROR_CLASSIFICATIONS[status_code]
         if error_class == TransientError:
-            if status_code == 429:
+            if status_code == 402:
+                return "InsufficientCredits"
+            elif status_code == 429:
                 return "RateLimitError"
             elif status_code == 503:
                 return "ServiceUnavailable"
@@ -74,10 +93,21 @@ def classify_error(status_code: int, error_message: str) -> str:
         else:
             return "PermanentError"
 
-    # Default classification based on error message
-    if any(keyword in error_message.lower() for keyword in ["timeout", "connection"]):
+    # OpenRouter-specific error message classification
+    error_lower = error_message.lower()
+
+    # Check for OpenRouter-specific errors
+    if "insufficient credits" in error_lower or "credit" in error_lower:
+        return "InsufficientCredits"
+    elif "content filter" in error_lower or "moderation" in error_lower:
+        return "ContentFilter"
+    elif "warming up" in error_lower or "warm-up" in error_lower:
+        return "ModelWarmup"
+    elif "provider error" in error_lower or "fallback" in error_lower:
+        return "ProviderError"
+    elif any(keyword in error_lower for keyword in ["timeout", "connection"]):
         return "NetworkTimeout"
-    elif "rate limit" in error_message.lower():
+    elif "rate limit" in error_lower:
         return "RateLimitError"
     else:
         return "Default"
@@ -158,9 +188,9 @@ async def move_to_dlq(redis_conn: redis.Redis, task_id: str, reason: str) -> Non
         redis_conn.hset(f"dlq:task:{task_id}", mapping=task_data)
 
 
-async def summarize_text(content: str) -> str:
+async def summarize_text_with_pybreaker(content: str) -> str:
     """
-    Summarize text using OpenRouter API.
+    Summarize text using OpenRouter API with pybreaker circuit breaker.
 
     Args:
         content: Text content to summarize
@@ -169,64 +199,42 @@ async def summarize_text(content: str) -> str:
         Summarized text
 
     Raises:
-        TransientError: For retryable errors
-        PermanentError: For non-retryable errors
+        TransientError: For retryable errors (402, 429, 5xx, network issues)
+        PermanentError: For non-retryable errors (400, 401, 403, 404, content filter)
     """
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
 
-    # Check circuit breaker
-    if not circuit_breaker.can_execute("openrouter"):
-        raise TransientError("Circuit breaker is open for OpenRouter")
-
-    headers = {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
-        "Content-Type": "application/json",
-    }
-
-    payload = {
-        "model": settings.openrouter_model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant that summarizes text concisely while preserving key information.",
-            },
-            {
-                "role": "user",
-                "content": f"Please summarize the following text:\n\n{content}",
-            },
-        ],
-        "max_tokens": 500,
-        "temperature": 0.3,
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=settings.openrouter_timeout) as client:
-            response = await client.post(
-                f"{settings.openrouter_base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-            )
+        # Use the pybreaker-protected function
+        result = await call_openrouter_api(content)
+        return result
 
-            if response.status_code == 200:
-                circuit_breaker.record_success("openrouter")
-                data = response.json()
-                return data["choices"][0]["message"]["content"].strip()
-            else:
-                circuit_breaker.record_failure("openrouter")
-                error_class = ERROR_CLASSIFICATIONS.get(
-                    response.status_code, TransientError
-                )
-                raise error_class(
-                    f"OpenRouter API error: {response.status_code} - {response.text}"
-                )
+    except Exception as e:
+        error_msg = str(e)
 
-    except httpx.TimeoutException:
-        circuit_breaker.record_failure("openrouter")
-        raise TransientError("Request timeout")
-    except httpx.RequestError as e:
-        circuit_breaker.record_failure("openrouter")
-        raise TransientError(f"Network error: {str(e)}")
+        # Check if it's a circuit breaker error
+        if "circuit breaker" in error_msg.lower():
+            raise TransientError(f"Circuit breaker protection: {error_msg}")
+
+        # Extract status code if present
+        status_code = 0
+        if "OpenRouter API error:" in error_msg:
+            try:
+                status_code = int(error_msg.split("error: ")[1].split(" ")[0])
+            except (IndexError, ValueError):
+                pass
+
+        # Classify the error using our enhanced classification
+        error_type = classify_error(status_code, error_msg)
+
+        if error_type == "PermanentError":
+            raise PermanentError(f"OpenRouter API error: {error_msg}")
+        elif error_type == "ContentFilter":
+            raise PermanentError(f"Content moderation error: {error_msg}")
+        else:
+            # All other error types are transient
+            raise TransientError(f"OpenRouter API error ({error_type}): {error_msg}")
 
 
 class SummarizeTask(Task):
@@ -267,6 +275,7 @@ class SummarizeTask(Task):
         raise Retry(countdown=delay)
 
 
+@app.task(name="summarize_text")
 def summarize_task(task_id: str) -> str:
     """
     Main summarization task.
@@ -316,10 +325,10 @@ def summarize_task(task_id: str) -> str:
             },
         )
 
-        # Perform summarization
+        # Perform summarization using pybreaker
         import asyncio
 
-        result = asyncio.run(summarize_text(content))
+        result = asyncio.run(summarize_text_with_pybreaker(content))
 
         # Update to COMPLETED state
         redis_conn.hset(
@@ -360,6 +369,34 @@ def summarize_task(task_id: str) -> str:
         task.retry_with_backoff(TransientError(str(e)), task_id, retry_count)
 
 
+@app.task(name="get_worker_health")
+def get_worker_health() -> dict:
+    """Get health status of this specific worker including circuit breaker."""
+    cb_status = get_circuit_breaker_status()
+
+    return {
+        "worker_id": f"worker-{os.getpid()}",
+        "circuit_breaker": cb_status,
+        "status": "healthy" if cb_status["state"] != "open" else "unhealthy",
+        "timestamp": time.time(),
+    }
+
+
+@app.task(name="reset_worker_circuit_breaker")
+def reset_worker_circuit_breaker() -> dict:
+    """Manually reset circuit breaker on this worker."""
+    try:
+        reset_circuit_breaker()
+        return {
+            "status": "success",
+            "message": "Circuit breaker reset",
+            "new_state": get_circuit_breaker_status(),
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.task(name="process_scheduled_tasks")
 def process_scheduled_tasks() -> str:
     """
     Process scheduled tasks (retry queue management).
