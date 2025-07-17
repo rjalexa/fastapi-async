@@ -117,20 +117,52 @@ async def worker_health_check() -> dict:
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        # Send task to all workers to get their health
-        job = celery_app.send_task("get_worker_health")
+        # Use inspect to get stats from all active workers first
+        inspect = celery_app.control.inspect()
+        active_workers = inspect.active()
 
-        # Get result with timeout
-        try:
-            worker_results = job.get(timeout=5.0)
-            if not isinstance(worker_results, list):
-                worker_results = [worker_results]
-        except Exception as e:
+        if not active_workers:
             return {
-                "error": f"Failed to get worker responses: {str(e)}",
+                "error": "No active workers found",
                 "total_workers": 0,
                 "timestamp": datetime.utcnow().isoformat(),
             }
+
+        # Use Celery's broadcast to send task to ALL workers
+        try:
+            # Send health check task with broadcast to reach all workers
+            job_results = celery_app.control.broadcast(
+                "get_worker_health", reply=True, timeout=5.0
+            )
+
+            worker_results = []
+            if job_results:
+                for result in job_results:
+                    if result and isinstance(result, dict):
+                        worker_results.append(result)
+
+            # If broadcast didn't work, fall back to regular task
+            if not worker_results:
+                job = celery_app.send_task("get_worker_health")
+                result = job.get(timeout=3.0)
+                if result:
+                    worker_results = [result]
+
+        except Exception as e:
+            # Final fallback
+            try:
+                job = celery_app.send_task("get_worker_health")
+                result = job.get(timeout=3.0)
+                worker_results = [result] if result else []
+            except Exception:
+                return {
+                    "error": f"Failed to get worker responses: {str(e)}",
+                    "total_workers": len(active_workers) if active_workers else 0,
+                    "active_worker_names": list(active_workers.keys())
+                    if active_workers
+                    else [],
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
 
         # Aggregate results
         total_workers = len(worker_results)
@@ -148,8 +180,11 @@ async def worker_health_check() -> dict:
             "healthy_workers": healthy_workers,
             "circuit_breaker_states": circuit_breaker_states,
             "worker_details": worker_results,
+            "active_worker_names": list(active_workers.keys())
+            if active_workers
+            else [],
             "overall_status": "healthy"
-            if healthy_workers == total_workers
+            if healthy_workers == total_workers and total_workers > 0
             else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
         }

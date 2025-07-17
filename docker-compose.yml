@@ -1,3 +1,39 @@
+# Common configurations using YAML anchors
+x-worker-common: &worker-common
+  build:
+    context: .
+    dockerfile: ./src/worker/Dockerfile
+    args:
+      UID: 1000
+      GID: 1000
+  depends_on:
+    redis:
+      condition: service_healthy
+  volumes:
+    - ./src/worker:/app
+  user: "1000:1000"
+
+x-worker-environment: &worker-environment
+  REDIS_URL: ${REDIS_URL}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  C_FORCE_ROOT: 0
+  UV_CACHE_DIR: /home/celery/.cache/uv
+  HOME: /home/celery
+
+x-worker-full-environment: &worker-full-environment
+  <<: *worker-environment
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+  OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL}
+  OPENROUTER_MODEL: ${OPENROUTER_MODEL}
+  OPENROUTER_TIMEOUT: ${OPENROUTER_TIMEOUT}
+  CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-4}
+  CELERY_WORKER_SEND_TASK_EVENTS: ${CELERY_WORKER_SEND_TASK_EVENTS:-true}
+  CELERY_TASK_SEND_SENT_EVENT: ${CELERY_TASK_SEND_SENT_EVENT:-true}
+  CELERY_WORKER_DISABLE_RATE_LIMITS: ${CELERY_WORKER_DISABLE_RATE_LIMITS:-true}
+  CELERY_TASK_TRACK_STARTED: ${CELERY_TASK_TRACK_STARTED:-true}
+  CELERY_WORKER_HIJACK_ROOT_LOGGER: false
+
 services:
   redis:
     image: redis:7-alpine
@@ -34,41 +70,43 @@ services:
     command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
-    build:
-      context: .
-      dockerfile: ./src/worker/Dockerfile
-    environment:
-      - REDIS_URL=${REDIS_URL}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
-      - OPENROUTER_TIMEOUT=${OPENROUTER_TIMEOUT}
-      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-4}
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./src/worker:/app
-    command: uv run celery -A main worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+    <<: *worker-common
+    environment: 
+      <<: *worker-full-environment
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: >
+      uv run celery -A tasks worker 
+      --loglevel=${LOG_LEVEL:-info}
+      --concurrency=${CELERY_WORKER_CONCURRENCY:-4} 
+      --events
     deploy:
       replicas: ${WORKER_REPLICAS:-3}
 
   scheduler:
-    build:
-      context: .
-      dockerfile: ./src/worker/Dockerfile
+    <<: *worker-common
+    environment: 
+      <<: *worker-environment
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: uv run celery -A tasks beat --loglevel=${LOG_LEVEL:-info}
+
+  flower:
+    <<: *worker-common
+    ports:
+      - "5555:5555"
     environment:
-      - REDIS_URL=${REDIS_URL}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./src/worker:/app
-    command: uv run celery -A main beat --loglevel=info
+      <<: *worker-environment
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-admin:password}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: >
+      uv run celery -A tasks flower 
+      --host=0.0.0.0 
+      --port=5555 
+      --basic-auth=${FLOWER_BASIC_AUTH:-admin:password}
+      --enable_events=True
+      --auto_refresh=True
+      --max_tasks=10000
+      --loglevel=${LOG_LEVEL:-info}
 
   frontend:
     build:

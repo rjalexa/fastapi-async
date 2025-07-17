@@ -39,15 +39,26 @@ async def call_openrouter_api(content: str) -> str:
 
 def get_circuit_breaker_status() -> dict:
     """Get current circuit breaker status for this worker."""
-    return {
-        "state": openrouter_breaker.current_state,
-        "fail_count": openrouter_breaker.fail_counter,
-        "success_count": openrouter_breaker.success_counter,
-        "last_failure": str(openrouter_breaker.last_failure)
-        if openrouter_breaker.last_failure
-        else None,
-        "worker_pid": os.getpid(),
-    }
+    try:
+        # Get available attributes safely
+        status = {
+            "state": openrouter_breaker.current_state,
+            "fail_count": getattr(openrouter_breaker, "fail_counter", 0),
+            "success_count": getattr(openrouter_breaker, "success_counter", 0),
+            "worker_pid": os.getpid(),
+        }
+
+        # Add optional attributes if they exist
+        if hasattr(openrouter_breaker, "last_failure_time"):
+            status["last_failure_time"] = openrouter_breaker.last_failure_time
+
+        if hasattr(openrouter_breaker, "_last_failure"):
+            status["last_failure"] = str(openrouter_breaker._last_failure)
+
+        return status
+
+    except Exception as e:
+        return {"state": "error", "error": str(e), "worker_pid": os.getpid()}
 
 
 def reset_circuit_breaker():

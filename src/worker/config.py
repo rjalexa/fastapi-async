@@ -58,6 +58,24 @@ class Settings(BaseSettings):
     )  # 5 minutes
     task_time_limit: int = Field(default=600, env="TASK_TIME_LIMIT")  # 10 minutes
 
+    # Celery Monitoring Configuration (for Flower)
+    celery_worker_send_task_events: bool = Field(
+        default=True, env="CELERY_WORKER_SEND_TASK_EVENTS"
+    )
+    celery_task_send_sent_event: bool = Field(
+        default=True, env="CELERY_TASK_SEND_SENT_EVENT"
+    )
+    celery_worker_disable_rate_limits: bool = Field(
+        default=True, env="CELERY_WORKER_DISABLE_RATE_LIMITS"
+    )
+    celery_task_track_started: bool = Field(
+        default=True, env="CELERY_TASK_TRACK_STARTED"
+    )
+    celery_task_time_limit: int = Field(default=600, env="CELERY_TASK_TIME_LIMIT")
+    celery_task_soft_time_limit: int = Field(
+        default=300, env="CELERY_TASK_SOFT_TIME_LIMIT"
+    )
+
     class Config:
         env_file = ".env"
         case_sensitive = False
