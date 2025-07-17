@@ -26,22 +26,18 @@ app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    
     # Worker settings
     worker_concurrency=settings.worker_concurrency,
     worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
     task_soft_time_limit=settings.task_soft_time_limit,
     task_time_limit=settings.task_time_limit,
-    
     # Result backend settings
     result_expires=3600,  # 1 hour
-    
     # Task routing
     task_routes={
         "summarize_task": {"queue": "default"},
         "process_scheduled_tasks": {"queue": "scheduler"},
     },
-    
     # Beat schedule for periodic tasks
     beat_schedule={
         "process-scheduled-tasks": {

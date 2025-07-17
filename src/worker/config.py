@@ -1,6 +1,5 @@
 """Configuration settings for the worker service."""
 
-import os
 from typing import Optional
 
 from pydantic import Field
@@ -54,7 +53,9 @@ class Settings(BaseSettings):
     # Worker Configuration
     worker_concurrency: int = Field(default=4, env="WORKER_CONCURRENCY")
     worker_prefetch_multiplier: int = Field(default=1, env="WORKER_PREFETCH_MULTIPLIER")
-    task_soft_time_limit: int = Field(default=300, env="TASK_SOFT_TIME_LIMIT")  # 5 minutes
+    task_soft_time_limit: int = Field(
+        default=300, env="TASK_SOFT_TIME_LIMIT"
+    )  # 5 minutes
     task_time_limit: int = Field(default=600, env="TASK_TIME_LIMIT")  # 10 minutes
 
     class Config:

@@ -1,6 +1,5 @@
 """Configuration settings for the API service."""
 
-import os
 from typing import Optional
 
 from pydantic import Field

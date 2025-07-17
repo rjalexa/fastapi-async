@@ -14,10 +14,6 @@ from services import (
     QueueService,
     RedisService,
     TaskService,
-    health_service,
-    queue_service,
-    redis_service,
-    task_service,
 )
 
 # Configure logging
@@ -37,22 +33,22 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     logger.info("Starting AsyncTaskFlow API...")
-    
+
     # Initialize services
     global redis_service, task_service, queue_service, health_service
-    
+
     redis_service = RedisService(settings.redis_url)
     task_service = TaskService(redis_service)
     queue_service = QueueService(redis_service)
     health_service = HealthService(redis_service, celery_app)
-    
+
     # Set celery app in tasks router
     tasks.celery_app = celery_app
-    
+
     logger.info("Services initialized successfully")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down AsyncTaskFlow API...")
     if redis_service:
@@ -99,7 +95,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

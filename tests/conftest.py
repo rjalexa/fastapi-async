@@ -2,7 +2,7 @@
 
 import pytest
 import redis
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
@@ -48,10 +48,6 @@ def mock_openrouter_response():
     """Mock OpenRouter API response."""
     return {
         "choices": [
-            {
-                "message": {
-                    "content": "This is a test summary of the provided content."
-                }
-            }
+            {"message": {"content": "This is a test summary of the provided content."}}
         ]
     }

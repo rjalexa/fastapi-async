@@ -1,7 +1,6 @@
 """Service layer for task and queue management."""
 
 import json
-import time
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -165,9 +164,7 @@ class QueueService:
         # Calculate adaptive retry ratio
         retry_ratio = self._calculate_adaptive_retry_ratio(retry_depth)
 
-        return QueueStatus(
-            queues=queues, states=dict(states), retry_ratio=retry_ratio
-        )
+        return QueueStatus(queues=queues, states=dict(states), retry_ratio=retry_ratio)
 
     async def get_dlq_tasks(self, limit: int = 100) -> List[TaskDetail]:
         """Get tasks from dead letter queue."""
