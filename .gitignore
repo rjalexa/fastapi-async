@@ -328,3 +328,6 @@ media/uploads/
 # Configuration overrides
 config.local.*
 settings.local.*
+
+# Ruff related
+.ruff_cache
