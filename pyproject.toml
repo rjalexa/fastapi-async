@@ -3,7 +3,7 @@ name = "asynctaskflow"
 version = "0.1.0"
 description = "Production-ready distributed task processing system with FastAPI, Redis, and Celery"
 authors = [
-    {name = "AsyncTaskFlow Team", email = "team@asynctaskflow.com"}
+    {name = "AsyncTaskFlow", email = "bob@ralexander.it"}
 ]
 readme = "README.md"
 license = {text = "MIT"}

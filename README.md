@@ -58,6 +58,7 @@ The application will be available at:
 - **Dead Letter Queue**: Manages permanently failed tasks
 - **Exponential Backoff**: Smart retry strategy with jitter
 - **Real-time Monitoring**: Comprehensive health checks and metrics
+- **Horizontal Scaling**: Dynamic worker scaling with environment variables
 
 ## 📁 Project Structure
 
@@ -111,7 +112,7 @@ The application will be available at:
 |---------|------|-------------|
 | Frontend | 3000 | React web interface |
 | API | 8000 | FastAPI REST API |
-| Worker | - | Celery task workers |
+| Worker | - | Celery task workers (scalable) |
 | Redis | 6379 | Message broker & cache |
 
 ### API Endpoints
@@ -121,6 +122,59 @@ The application will be available at:
 - `GET /api/v1/tasks/{task_id}` - Get task status
 - `GET /api/v1/queues/status` - Queue statistics
 - `GET /docs` - Interactive API documentation
+
+## ⚖️ Scaling Workers
+
+The system supports dynamic worker scaling through environment variables:
+
+### Environment-based Scaling
+
+Configure the number of workers in your `.env` file:
+
+```bash
+# Worker scaling configuration
+WORKER_REPLICAS=3
+CELERY_WORKER_CONCURRENCY=4
+```
+
+### Runtime Scaling
+
+Scale workers dynamically without rebuilding:
+
+```bash
+# Scale to 5 workers
+WORKER_REPLICAS=5 docker compose up -d
+
+# Scale back to 2 workers  
+WORKER_REPLICAS=2 docker compose up -d
+
+# Scale to 1 worker for development
+WORKER_REPLICAS=1 docker compose up -d
+```
+
+### Manual Scaling
+
+Alternatively, use Docker Compose's built-in scaling:
+
+```bash
+# Scale to 4 workers
+docker compose up -d --scale worker=4
+
+# Scale back to 2 workers
+docker compose up -d --scale worker=2
+```
+
+### Monitoring Workers
+
+View all worker logs:
+```bash
+# All workers
+docker compose logs worker
+
+# Specific worker
+docker compose logs fastapi-async-worker-1
+docker compose logs fastapi-async-worker-2
+```
 
 ## 🧪 Testing
 
@@ -177,11 +231,13 @@ python utils/debug.py
    DEBUG=false
    LOG_LEVEL=INFO
    OPENROUTER_API_KEY=your_production_key
+   WORKER_REPLICAS=6
+   CELERY_WORKER_CONCURRENCY=8
    ```
 
-2. **Scale workers:**
+2. **Scale workers for production load:**
    ```bash
-   docker compose up -d --scale worker=4
+   docker compose up -d --scale worker=6
    ```
 
 3. **Enable monitoring:**
@@ -199,7 +255,8 @@ python utils/debug.py
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
 | `OPENROUTER_API_KEY` | - | OpenRouter API key |
 | `MAX_RETRIES` | `3` | Maximum task retry attempts |
-| `WORKER_CONCURRENCY` | `4` | Celery worker concurrency |
+| `WORKER_REPLICAS` | `3` | Number of worker instances |
+| `CELERY_WORKER_CONCURRENCY` | `4` | Tasks per worker process |
 | `DEBUG` | `false` | Enable debug mode |
 
 ### Queue Configuration

@@ -1,11 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "asynctaskflow-api"
 version = "0.1.0"
 description = "FastAPI service for AsyncTaskFlow"
 authors = [
-    {name = "AsyncTaskFlow Team", email = "team@asynctaskflow.com"}
+    {name = "Bob Alexander", email = "gogonegro@gmail.com"}
 ]
-readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
@@ -30,9 +33,9 @@ dev = [
     "mypy>=1.7.0",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# Add this section to tell hatchling which files to include
+[tool.hatch.build.targets.wheel]
+packages = ["."]
 
 [tool.black]
 line-length = 88

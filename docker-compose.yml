@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   redis:
     image: redis:7-alpine
@@ -15,63 +13,66 @@ services:
 
   api:
     build:
-      context: ./src/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./src/api/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - OPENROUTER_MODEL=meta-llama/llama-3.2-90b-text-preview
-      - OPENROUTER_TIMEOUT=30
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_TIMEOUT=${OPENROUTER_TIMEOUT}
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./src/api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
     build:
-      context: ./src/worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./src/worker/Dockerfile
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-      - OPENROUTER_MODEL=meta-llama/llama-3.2-90b-text-preview
-      - OPENROUTER_TIMEOUT=30
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_TIMEOUT=${OPENROUTER_TIMEOUT}
+      - CELERY_WORKER_CONCURRENCY=${CELERY_WORKER_CONCURRENCY:-4}
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./src/worker:/app
-    command: celery -A main worker --loglevel=info
+    command: uv run celery -A main worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-4}
+    deploy:
+      replicas: ${WORKER_REPLICAS:-3}
 
   scheduler:
     build:
-      context: ./src/worker
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./src/worker/Dockerfile
     environment:
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./src/worker:/app
-    command: celery -A main beat --loglevel=info
+    command: uv run celery -A main beat --loglevel=info
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./frontend/Dockerfile
     ports:
       - "3000:80"
     depends_on:
