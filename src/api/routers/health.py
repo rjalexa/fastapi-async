@@ -140,7 +140,16 @@ async def worker_health_check() -> dict:
             if job_results:
                 for result in job_results:
                     if result and isinstance(result, dict):
-                        worker_results.append(result)
+                        # Each result is a dict with worker_name as key
+                        # Extract the actual worker data from the nested structure
+                        for worker_name, worker_data in result.items():
+                            if (
+                                isinstance(worker_data, dict)
+                                and "status" in worker_data
+                            ):
+                                # Add the worker name to the data for reference
+                                worker_data["worker_name"] = worker_name
+                                worker_results.append(worker_data)
 
             # If broadcast didn't work, fall back to regular task
             if not worker_results:
@@ -165,7 +174,7 @@ async def worker_health_check() -> dict:
                     "timestamp": datetime.utcnow().isoformat(),
                 }
 
-        # Aggregate results
+        # Aggregate results with proper parsing
         total_workers = len(worker_results)
         healthy_workers = sum(1 for w in worker_results if w.get("status") == "healthy")
 
@@ -208,15 +217,30 @@ async def reset_all_circuit_breakers() -> dict:
     try:
         from main import celery_app
 
-        # Send reset task to all workers
-        job = celery_app.send_task("reset_worker_circuit_breaker")
+        # Use broadcast to send reset task to all workers
+        job_results = celery_app.control.broadcast(
+            "reset_worker_circuit_breaker", reply=True, timeout=5.0
+        )
 
-        try:
-            results = job.get(timeout=5.0)
-            if not isinstance(results, list):
-                results = [results]
-        except Exception:
-            results = []
+        results = []
+        if job_results:
+            for result in job_results:
+                if result and isinstance(result, dict):
+                    # Extract worker data from nested structure
+                    for worker_name, worker_data in result.items():
+                        if isinstance(worker_data, dict):
+                            worker_data["worker_name"] = worker_name
+                            results.append(worker_data)
+
+        # If broadcast didn't work, fall back to regular task
+        if not results:
+            job = celery_app.send_task("reset_worker_circuit_breaker")
+            try:
+                result = job.get(timeout=5.0)
+                if result:
+                    results = [result]
+            except Exception:
+                results = []
 
         successful_resets = sum(1 for r in results if r.get("status") == "success")
 

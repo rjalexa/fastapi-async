@@ -74,11 +74,33 @@ app = Celery(
     backend=settings.celery_result_backend,
 )
 
-# --- Remote-Control Health Command (No changes needed) --------------------
+# Configure Celery
+app.conf.update(
+    # Task settings
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    # Worker settings
+    worker_concurrency=settings.worker_concurrency,
+    worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
+    task_soft_time_limit=settings.task_soft_time_limit,
+    task_time_limit=settings.task_time_limit,
+    # Result backend settings
+    result_expires=3600,  # 1 hour
+    # Task routing
+    task_routes={
+        "summarize_text": {"queue": "default"},
+        "process_scheduled_tasks": {"queue": "scheduler"},
+    },
+)
+
+# --- Remote-Control Health Commands --------------------------------------
 
 
 @Panel.register
-def get_worker_health(state, **kwargs):
+def get_worker_health(panel, **kwargs):
     """Return health info for this worker (invoked via broadcast)."""
     cb_status = get_circuit_breaker_status()
     return {
@@ -87,6 +109,25 @@ def get_worker_health(state, **kwargs):
         "status": "healthy" if cb_status["state"] != "open" else "unhealthy",
         "timestamp": time.time(),
     }
+
+
+@Panel.register
+def reset_worker_circuit_breaker(panel, **kwargs):
+    """Reset the circuit breaker on this worker (invoked via broadcast)."""
+    try:
+        reset_circuit_breaker()
+        return {
+            "status": "success",
+            "message": "Circuit breaker reset.",
+            "new_state": get_circuit_breaker_status(),
+            "worker_id": f"worker-{os.getpid()}",
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "worker_id": f"worker-{os.getpid()}",
+        }
 
 
 # --- Async Redis and State Management Helpers -----------------------------
@@ -289,17 +330,3 @@ def process_scheduled_tasks() -> str:
 
     moved_count = asyncio.run(_run_processing())
     return f"Moved {moved_count} tasks from scheduled to retry queue."
-
-
-@app.task(name="reset_worker_circuit_breaker")
-def reset_worker_circuit_breaker() -> dict:
-    """Manually reset the circuit breaker on this worker."""
-    try:
-        reset_circuit_breaker()
-        return {
-            "status": "success",
-            "message": "Circuit breaker reset.",
-            "new_state": get_circuit_breaker_status(),
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
