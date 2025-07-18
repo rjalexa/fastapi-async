@@ -209,6 +209,8 @@ Access the Flower monitoring dashboard at http://localhost:5555 to view:
 
 ## Architecture
 
+### System Components
+
 The system consists of several components:
 
 - **FastAPI Application**: REST API for task management
@@ -216,6 +218,120 @@ The system consists of several components:
 - **Redis**: Message broker and result backend
 - **Flower**: Web-based monitoring tool
 - **Circuit Breaker**: Protection against external service failures
+
+### Task Flow Architecture
+
+The system implements a sophisticated queue architecture that provides fine-grained control over task processing while maintaining scalability and fault tolerance. Here's how a task flows through the system:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│  Client Request │────▶│   FastAPI App   │────▶│  Redis Storage  │
+│                 │     │   (REST API)    │     │ (Task Metadata) │
+│                 │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                          │
+                        ┌─────────────────┐               │
+                        │                 │               │
+                        │ Custom Redis    │◀──────────────┘
+                        │ Queue (Primary) │
+                        │                 │
+                        └────────┬────────┘
+                                 │
+                        ┌────────▼────────┐     ┌─────────────────┐
+                        │                 │     │                 │
+                        │ Queue Consumer  │────▶│ Celery Worker   │
+                        │ (BLPOP Process) │     │ (Task Execution)│
+                        │                 │     │                 │
+                        └─────────────────┘     └────────┬────────┘
+                                                          │
+                        ┌─────────────────┐               │
+                        │                 │               │
+                        │ OpenRouter API  │◀──────────────┘
+                        │ (LLM Backend)   │
+                        │                 │
+                        └─────────────────┘
+```
+
+#### Step-by-Step Task Flow
+
+**1. Task Creation (API Layer)**
+```http
+POST /api/v1/tasks/
+Content-Type: application/json
+{"content": "Text to summarize"}
+```
+- FastAPI receives the HTTP request
+- Creates task metadata in Redis: `task:{task_id}` with state "PENDING"
+- Pushes task ID to `tasks:pending:primary` Redis list
+- Returns task ID to client immediately
+- **No direct Celery interaction** - API is completely decoupled
+
+**2. Task Consumption (Consumer Layer)**
+- Dedicated consumer process runs on each worker container
+- Uses Redis `BLPOP` operation to atomically pull task IDs from queues
+- Implements intelligent queue selection:
+  - 70% from `tasks:pending:primary` (new tasks)
+  - 30% from `tasks:pending:retry` (failed tasks)
+- Ratio adapts based on retry queue pressure
+
+**3. Task Dispatch (Consumer → Celery)**
+- Consumer receives task ID from Redis queue
+- Updates task state to "ACTIVE" in Redis
+- Dispatches to local Celery worker: `celery_app.send_task("summarize_text", args=[task_id])`
+- Consumer continues listening for more tasks
+
+**4. Task Execution (Celery Worker)**
+- Celery worker receives task from internal queue
+- Loads task metadata from Redis using task ID
+- Calls OpenRouter API with circuit breaker protection
+- Handles retries, errors, and state management
+
+**5. LLM Processing (OpenRouter API)**
+- HTTP request to OpenRouter's chat completions endpoint
+- Uses configured model (default: `meta-llama/llama-3.2-90b-text-preview`)
+- Returns summarized text or error response
+
+**6. Task Completion**
+- On success: Updates task state to "COMPLETED" with result
+- On failure: Schedules retry or moves to dead letter queue
+- All state changes stored in Redis for API queries
+
+#### Queue Management
+
+The system maintains multiple specialized queues:
+
+- **`tasks:pending:primary`**: New tasks from API
+- **`tasks:pending:retry`**: Failed tasks eligible for retry  
+- **`tasks:scheduled`**: Delayed retries (Redis sorted set)
+- **`dlq:tasks`**: Permanently failed tasks
+
+#### Monitoring Integration
+
+**Custom Queue Monitoring:**
+```bash
+curl http://localhost:8000/api/v1/queues/status
+```
+Shows tasks waiting in custom Redis queues (invisible to Flower)
+
+**Celery Monitoring (Flower):**
+- Visit http://localhost:5555
+- Shows tasks currently executing in Celery workers
+- Provides worker performance metrics
+
+**Complete System View:**
+- Custom endpoint shows queued tasks
+- Flower shows executing tasks  
+- Together they provide full pipeline visibility
+
+#### Architecture Benefits
+
+✅ **Horizontal Scalability**: Add workers and they automatically participate  
+✅ **Fault Tolerance**: Atomic operations prevent task loss  
+✅ **Queue Pressure Management**: Adaptive ratios prevent retry storms  
+✅ **Clean Separation**: API, queuing, and execution are decoupled  
+✅ **Sophisticated Retry Logic**: Primary/retry queue separation  
+✅ **Production Monitoring**: Dual monitoring approach provides complete visibility
 
 ## API Endpoints
 

@@ -37,7 +37,7 @@ def main():
         import random
         import time
         from config import settings
-        from tasks import summarize_task as summarize_text_task, calculate_adaptive_retry_ratio
+        from tasks import app as celery_app, calculate_adaptive_retry_ratio
         
         logger.info("Starting Redis queue consumer...")
         
@@ -70,8 +70,8 @@ def main():
                 queue_name, task_id = result
                 logger.info(f"Received task {task_id} from {queue_name}")
                 
-                # Now trigger the actual summarization task
-                summarize_text_task.delay(task_id)
+                # Now trigger the actual summarization task using the correct task name
+                celery_app.send_task("summarize_text", args=[task_id])
                 
                 processed_count += 1
                 logger.info(f"Dispatched task {task_id} for processing (total: {processed_count})")

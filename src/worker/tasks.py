@@ -91,8 +91,8 @@ app.conf.update(
     result_expires=3600,  # 1 hour
     # Task routing
     task_routes={
-        "summarize_text": {"queue": "default"},
-        "process_scheduled_tasks": {"queue": "scheduler"},
+        "summarize_text": {"queue": "celery"},
+        "process_scheduled_tasks": {"queue": "celery"},
     },
 )
 
