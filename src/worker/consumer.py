@@ -36,6 +36,7 @@ def main():
         import redis
         import random
         import time
+        import os
         from config import settings
         from tasks import app as celery_app, calculate_adaptive_retry_ratio
         
@@ -44,10 +45,23 @@ def main():
         # Use synchronous Redis for BLPOP
         redis_conn = redis.from_url(settings.redis_url, decode_responses=True)
         
+        # Generate unique worker ID for heartbeat
+        worker_id = f"worker-{os.getpid()}-{int(time.time())}"
+        heartbeat_key = f"worker:heartbeat:{worker_id}"
+        
         processed_count = 0
+        last_heartbeat = 0
         
         while True:
             try:
+                current_time = time.time()
+                
+                # Update heartbeat every 30 seconds
+                if current_time - last_heartbeat > 30:
+                    redis_conn.setex(heartbeat_key, 90, current_time)  # Expire after 90 seconds
+                    last_heartbeat = current_time
+                    logger.debug(f"Updated heartbeat for worker {worker_id}")
+                
                 # Get current retry queue depth for adaptive ratio
                 retry_depth = redis_conn.llen("tasks:pending:retry")
                 retry_ratio = calculate_adaptive_retry_ratio(retry_depth)

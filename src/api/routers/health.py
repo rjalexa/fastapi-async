@@ -101,98 +101,97 @@ async def readiness_check(request: Request) -> dict:
 
 
 @router.get("/health/workers")
-async def worker_health_check() -> dict:
+async def worker_health_check(request: Request) -> dict:
     """
-    Get detailed health from all workers including their circuit breaker status.
+    Get detailed health from all workers based on Redis heartbeats.
 
-    Queries each worker directly for their internal circuit breaker state.
+    Uses Redis heartbeat keys to determine worker health status.
     """
     try:
-        # Import the celery app from the API main module
-        try:
-            from main import celery_app
-        except ImportError:
+        current_health_service = get_health_service(request)
+        
+        if not current_health_service:
             return {
-                "error": "Cannot connect to worker application - workers may not be running",
+                "error": "Health service not initialized",
                 "total_workers": 0,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        # Use inspect to get stats from all active workers first
-        inspect = celery_app.control.inspect()
-        active_workers = inspect.active()
+        # Get all heartbeat keys
+        heartbeat_keys = []
+        async for key in current_health_service.redis_service.redis.scan_iter("worker:heartbeat:*"):
+            heartbeat_keys.append(key)
 
-        if not active_workers:
+        if not heartbeat_keys:
             return {
-                "error": "No active workers found",
+                "error": "No worker heartbeats found - workers may not be running",
                 "total_workers": 0,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
-        # Use Celery's broadcast to send task to ALL workers
-        try:
-            # Send health check task with broadcast to reach all workers
-            job_results = celery_app.control.broadcast(
-                "get_worker_health", reply=True, timeout=5.0
-            )
+        # Check each heartbeat
+        import time
+        current_time = time.time()
+        worker_details = []
+        healthy_workers = 0
 
-            worker_results = []
-            if job_results:
-                for result in job_results:
-                    if result and isinstance(result, dict):
-                        # Each result is a dict with worker_name as key
-                        # Extract the actual worker data from the nested structure
-                        for worker_name, worker_data in result.items():
-                            if isinstance(worker_data, dict) and "status" in worker_data:
-                                # Add the worker name to the data for reference
-                                worker_data["worker_name"] = worker_name
-                                worker_results.append(worker_data)
-
-            # If broadcast didn't work, fall back to regular task
-            if not worker_results:
-                job = celery_app.send_task("get_worker_health")
-                result = job.get(timeout=3.0)
-                if result:
-                    worker_results = [result]
-
-        except Exception as e:
-            # Final fallback
+        for key in heartbeat_keys:
+            worker_id = key.split(":", 2)[2]  # Extract worker ID from key
             try:
-                job = celery_app.send_task("get_worker_health")
-                result = job.get(timeout=3.0)
-                worker_results = [result] if result else []
-            except Exception:
-                return {
-                    "error": f"Failed to get worker responses: {str(e)}",
-                    "total_workers": len(active_workers) if active_workers else 0,
-                    "active_worker_names": list(active_workers.keys())
-                    if active_workers
-                    else [],
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
+                heartbeat_time = await current_health_service.redis_service.redis.get(key)
+                if heartbeat_time:
+                    heartbeat_timestamp = float(heartbeat_time)
+                    age = current_time - heartbeat_timestamp
+                    is_healthy = age < 60  # Consider healthy if heartbeat within last 60 seconds
+                    
+                    if is_healthy:
+                        healthy_workers += 1
+                    
+                    worker_details.append({
+                        "worker_id": worker_id,
+                        "status": "healthy" if is_healthy else "stale",
+                        "last_heartbeat": heartbeat_timestamp,
+                        "heartbeat_age_seconds": round(age, 2),
+                        "circuit_breaker": {
+                            "state": "closed",  # Default assumption for Redis-based workers
+                            "note": "Circuit breaker status not available via Redis heartbeat"
+                        }
+                    })
+                else:
+                    worker_details.append({
+                        "worker_id": worker_id,
+                        "status": "no_heartbeat",
+                        "last_heartbeat": None,
+                        "heartbeat_age_seconds": None,
+                        "circuit_breaker": {
+                            "state": "unknown"
+                        }
+                    })
+            except (ValueError, TypeError) as e:
+                worker_details.append({
+                    "worker_id": worker_id,
+                    "status": "error",
+                    "error": str(e),
+                    "circuit_breaker": {
+                        "state": "unknown"
+                    }
+                })
 
-        # Aggregate results with proper parsing
-        total_workers = len(worker_results)
-        healthy_workers = sum(1 for w in worker_results if w.get("status") == "healthy")
-
+        total_workers = len(worker_details)
+        
+        # Aggregate circuit breaker states
         circuit_breaker_states = {}
-        for worker in worker_results:
+        for worker in worker_details:
             cb_state = worker.get("circuit_breaker", {}).get("state", "unknown")
-            circuit_breaker_states[cb_state] = (
-                circuit_breaker_states.get(cb_state, 0) + 1
-            )
+            circuit_breaker_states[cb_state] = circuit_breaker_states.get(cb_state, 0) + 1
 
         return {
-            "overall_status": "healthy"
-            if healthy_workers == total_workers and total_workers > 0
-            else "degraded",
+            "overall_status": "healthy" if healthy_workers == total_workers and total_workers > 0 else "degraded",
             "total_workers": total_workers,
             "healthy_workers": healthy_workers,
+            "stale_workers": sum(1 for w in worker_details if w.get("status") == "stale"),
             "circuit_breaker_states": circuit_breaker_states,
-            "worker_details": worker_results,
-            "active_worker_names": list(active_workers.keys())
-            if active_workers
-            else [],
+            "worker_details": worker_details,
             "timestamp": datetime.utcnow().isoformat(),
         }
 

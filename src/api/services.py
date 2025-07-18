@@ -312,7 +312,7 @@ class QueueService:
 class HealthService:
     """Service for health checks."""
 
-    def __init__(self, redis_service: RedisService, celery_app: Celery):
+    def __init__(self, redis_service: RedisService, celery_app: Optional[Celery] = None):
         self.redis_service = redis_service
         self.celery_app = celery_app
 
@@ -321,12 +321,8 @@ class HealthService:
         # Check Redis
         redis_ok = await self.redis_service.ping()
 
-        # Check Celery workers
-        try:
-            active_workers = self.celery_app.control.inspect().active_queues()
-            workers_ok = bool(active_workers)
-        except Exception:
-            workers_ok = False
+        # Check workers through Redis heartbeat mechanism
+        workers_ok = await self._check_workers_via_redis()
 
         # Overall status
         status = "healthy" if redis_ok and workers_ok else "unhealthy"
@@ -340,6 +336,87 @@ class HealthService:
             "note": "Use /health/workers for detailed circuit breaker status",
             "timestamp": datetime.utcnow(),
         }
+
+    async def _check_workers_via_redis(self) -> bool:
+        """Check worker health via Redis heartbeat keys."""
+        try:
+            # Look for worker heartbeat keys that should be updated regularly
+            # Workers should set heartbeat keys like "worker:heartbeat:{worker_id}"
+            heartbeat_keys = []
+            async for key in self.redis_service.redis.scan_iter("worker:heartbeat:*"):
+                heartbeat_keys.append(key)
+            
+            if not heartbeat_keys:
+                # No heartbeat keys found - workers might not be running
+                return False
+            
+            # Check if any heartbeat is recent (within last 60 seconds)
+            import time
+            current_time = time.time()
+            recent_heartbeats = 0
+            
+            for key in heartbeat_keys:
+                try:
+                    heartbeat_time = await self.redis_service.redis.get(key)
+                    if heartbeat_time:
+                        heartbeat_timestamp = float(heartbeat_time)
+                        if current_time - heartbeat_timestamp < 60:  # Within last 60 seconds
+                            recent_heartbeats += 1
+                except (ValueError, TypeError):
+                    continue
+            
+            return recent_heartbeats > 0
+            
+        except Exception:
+            # If we can't check heartbeats, fall back to checking if queues are being processed
+            return await self._check_queue_activity()
+
+    async def _check_queue_activity(self) -> bool:
+        """Fallback: Check if queues show signs of being processed."""
+        try:
+            # Check if there are any tasks in ACTIVE state (being processed)
+            active_count = 0
+            async for key in self.redis_service.redis.scan_iter("task:*"):
+                state = await self.redis_service.redis.hget(key, "state")
+                if state == TaskState.ACTIVE.value:
+                    active_count += 1
+                    if active_count > 0:  # Found at least one active task
+                        return True
+            
+            # If no active tasks, check if we have any completed tasks recently
+            # This indicates workers were active recently
+            recent_completions = 0
+            import time
+            current_time = time.time()
+            
+            async for key in self.redis_service.redis.scan_iter("task:*"):
+                completed_at = await self.redis_service.redis.hget(key, "completed_at")
+                if completed_at:
+                    try:
+                        completed_timestamp = datetime.fromisoformat(completed_at).timestamp()
+                        if current_time - completed_timestamp < 300:  # Within last 5 minutes
+                            recent_completions += 1
+                            if recent_completions > 0:
+                                return True
+                    except (ValueError, TypeError):
+                        continue
+            
+            # If we have pending tasks but no recent activity, workers might be down
+            pending_count = 0
+            pending_count += await self.redis_service.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
+            pending_count += await self.redis_service.redis.llen(QUEUE_KEY_MAP[QueueName.RETRY])
+            
+            # If there are pending tasks but no recent activity, workers are likely down
+            if pending_count > 0:
+                return False
+            
+            # No pending tasks and no recent activity - this could be normal (no work to do)
+            # In this case, we'll assume workers are healthy
+            return True
+            
+        except Exception:
+            # If all checks fail, assume workers are down
+            return False
 
 
 # Global service instances (will be initialized in main.py)

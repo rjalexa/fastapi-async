@@ -247,6 +247,13 @@ async def summarize_text_with_pybreaker(content: str) -> str:
 # --- Celery Tasks ---------------------------------------------------------
 
 
+async def update_worker_heartbeat(redis_conn: aioredis.Redis, worker_id: str) -> None:
+    """Update worker heartbeat in Redis."""
+    heartbeat_key = f"worker:heartbeat:{worker_id}"
+    current_time = time.time()
+    await redis_conn.setex(heartbeat_key, 90, current_time)  # Expire after 90 seconds
+
+
 @app.task(name="summarize_text", bind=True)
 def summarize_task(self: Task, task_id: str) -> str:
     """
@@ -255,8 +262,12 @@ def summarize_task(self: Task, task_id: str) -> str:
     """
     redis_conn = get_async_redis_connection()
     retry_count = self.request.retries  # Use Celery's built-in retry counter
+    worker_id = f"celery-{self.request.hostname}-{os.getpid()}"
 
     async def _run_task():
+        # Update heartbeat at start of task
+        await update_worker_heartbeat(redis_conn, worker_id)
+        
         data = await redis_conn.hgetall(f"task:{task_id}")
         if not data:
             raise PermanentError(f"Task {task_id} not found in Redis.")
@@ -270,7 +281,7 @@ def summarize_task(self: Task, task_id: str) -> str:
             raise PermanentError(f"Max retries ({settings.max_retries}) exceeded.")
 
         await update_task_state(
-            redis_conn, task_id, "ACTIVE", worker_id=self.request.hostname
+            redis_conn, task_id, "ACTIVE", worker_id=worker_id
         )
 
         result = await summarize_text_with_pybreaker(content)
@@ -282,6 +293,10 @@ def summarize_task(self: Task, task_id: str) -> str:
             result=result,
             completed_at=datetime.utcnow().isoformat(),
         )
+        
+        # Update heartbeat at end of task
+        await update_worker_heartbeat(redis_conn, worker_id)
+        
         return f"Task {task_id} completed successfully."
 
     try:
