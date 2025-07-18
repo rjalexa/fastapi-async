@@ -13,6 +13,30 @@ x-worker-common: &worker-common
   volumes:
     - ./src/worker:/app
   user: "1000:1000"
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "python", "-c", "import redis; r=redis.from_url('${REDIS_URL:-redis://redis:6379/0}'); r.ping()"]
+    interval: ${WORKER_HEALTH_CHECK_INTERVAL:-30s}
+    timeout: ${WORKER_HEALTH_CHECK_TIMEOUT:-10s}
+    retries: ${WORKER_HEALTH_CHECK_RETRIES:-3}
+    start_period: ${WORKER_HEALTH_CHECK_START_PERIOD:-60s}
+  deploy:
+    resources:
+      limits:
+        memory: ${WORKER_MEMORY_LIMIT:-512M}
+        cpus: "${WORKER_CPU_LIMIT:-1.0}"
+      reservations:
+        memory: ${WORKER_MEMORY_RESERVATION:-256M}
+        cpus: "${WORKER_CPU_RESERVATION:-0.5}"
+  tmpfs:
+    - /tmp:noexec,nosuid,size=100m
+  logging:
+    driver: "json-file"
+    options:
+      max-size: ${WORKER_LOG_MAX_SIZE:-10m}
+      max-file: "${WORKER_LOG_MAX_FILES:-3}"
+  stop_signal: SIGTERM
+  stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-30s}
 
 x-worker-environment: &worker-environment
   REDIS_URL: ${REDIS_URL}
@@ -21,6 +45,8 @@ x-worker-environment: &worker-environment
   C_FORCE_ROOT: 0
   UV_CACHE_DIR: /home/celery/.cache/uv
   HOME: /home/celery
+  PYTHONDONTWRITEBYTECODE: 1
+  PYTHONUNBUFFERED: 1
 
 x-worker-full-environment: &worker-full-environment
   <<: *worker-environment
@@ -29,11 +55,16 @@ x-worker-full-environment: &worker-full-environment
   OPENROUTER_MODEL: ${OPENROUTER_MODEL}
   OPENROUTER_TIMEOUT: ${OPENROUTER_TIMEOUT}
   CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-4}
+  CELERY_WORKER_PREFETCH_MULTIPLIER: ${CELERY_WORKER_PREFETCH_MULTIPLIER:-1}
+  CELERY_WORKER_MAX_TASKS_PER_CHILD: ${WORKER_MAX_TASKS_PER_CHILD:-1000}
+  CELERY_WORKER_MAX_MEMORY_PER_CHILD: ${WORKER_MAX_MEMORY_PER_CHILD:-200000}
   CELERY_WORKER_SEND_TASK_EVENTS: ${CELERY_WORKER_SEND_TASK_EVENTS:-true}
   CELERY_TASK_SEND_SENT_EVENT: ${CELERY_TASK_SEND_SENT_EVENT:-true}
   CELERY_WORKER_DISABLE_RATE_LIMITS: ${CELERY_WORKER_DISABLE_RATE_LIMITS:-true}
   CELERY_TASK_TRACK_STARTED: ${CELERY_TASK_TRACK_STARTED:-true}
   CELERY_WORKER_HIJACK_ROOT_LOGGER: false
+  CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-900}
+  CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-600}
 
 services:
   redis:
@@ -44,9 +75,10 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   api:
     build:
@@ -75,13 +107,18 @@ services:
     environment: 
       <<: *worker-full-environment
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    command: >
-      uv run celery -A tasks worker 
-      --loglevel=${LOG_LEVEL:-info}
-      --concurrency=${CELERY_WORKER_CONCURRENCY:-4} 
-      --events
     deploy:
       replicas: ${WORKER_REPLICAS:-3}
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY_LIMIT:-512M}
+          cpus: "${WORKER_CPU_LIMIT:-1.0}"
+        reservations:
+          memory: ${WORKER_MEMORY_RESERVATION:-256M}
+          cpus: "${WORKER_CPU_RESERVATION:-0.5}"
+    labels:
+      - "com.asynctaskflow.service=worker"
+    command: /app/start_worker.sh
 
   scheduler:
     <<: *worker-common
@@ -89,6 +126,8 @@ services:
       <<: *worker-environment
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     command: uv run celery -A tasks beat --loglevel=${LOG_LEVEL:-info}
+    labels:
+      - "com.asynctaskflow.service=scheduler"
 
   flower:
     <<: *worker-common
@@ -108,6 +147,8 @@ services:
       --auto_refresh=True
       --max_tasks=10000
       --loglevel=${LOG_LEVEL:-info}
+    labels:
+      - "com.asynctaskflow.service=flower"
 
   frontend:
     build:
@@ -117,6 +158,8 @@ services:
       - "3000:80"
     depends_on:
       - api
+    labels:
+      - "com.asynctaskflow.service=frontend"
 
 volumes:
   redis_data:

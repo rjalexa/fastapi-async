@@ -1,5 +1,14 @@
 FROM python:3.12-slim
 
+# Prevent Python from writing bytecode files (.pyc) to disk
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Ensure Python output is sent straight to terminal without buffering
+ENV PYTHONUNBUFFERED=1
+
+# Set proper umask to avoid permission issues
+ENV UMASK=0022
+
 # Create non-root user with specific UID/GID that matches docker-compose
 ARG UID=1000
 ARG GID=1000
@@ -33,9 +42,22 @@ RUN UV_CACHE_DIR=/home/celery/.cache/uv uv sync --frozen && \
 # Copy application code
 COPY src/worker/ ./
 
+# Clean any existing Python bytecode cache before setting ownership
+RUN find /app -name "*.pyc" -delete && \
+    find /app -name "__pycache__" -type d -exec rm -rf {} + || true
+
 # Create necessary directories and set ownership
 RUN mkdir -p /app/logs /app/tmp && \
     chown -R celery:celery /app /home/celery
+
+# Add the enhanced startup script
+COPY src/worker/start_worker.sh /app/
+RUN chmod +x /app/start_worker.sh && \
+    chown celery:celery /app/start_worker.sh
+
+# Add a healthcheck for the worker containers
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD python -c "import redis; r=redis.from_url('${REDIS_URL:-redis://redis:6379/0}'); r.ping()" || exit 1
 
 # Switch to non-root user
 USER celery
@@ -48,4 +70,4 @@ ENV HOME=/home/celery
 ENV PATH=/home/celery/.local/bin:$PATH
 
 # Default command (will be overridden by docker-compose)
-CMD ["uv", "run", "celery", "-A", "tasks", "worker", "--loglevel=info"]
+CMD ["/app/start_worker.sh"]

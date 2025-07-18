@@ -143,10 +143,7 @@ async def worker_health_check() -> dict:
                         # Each result is a dict with worker_name as key
                         # Extract the actual worker data from the nested structure
                         for worker_name, worker_data in result.items():
-                            if (
-                                isinstance(worker_data, dict)
-                                and "status" in worker_data
-                            ):
+                            if isinstance(worker_data, dict) and "status" in worker_data:
                                 # Add the worker name to the data for reference
                                 worker_data["worker_name"] = worker_name
                                 worker_results.append(worker_data)
@@ -186,6 +183,9 @@ async def worker_health_check() -> dict:
             )
 
         return {
+            "overall_status": "healthy"
+            if healthy_workers == total_workers and total_workers > 0
+            else "degraded",
             "total_workers": total_workers,
             "healthy_workers": healthy_workers,
             "circuit_breaker_states": circuit_breaker_states,
@@ -193,9 +193,6 @@ async def worker_health_check() -> dict:
             "active_worker_names": list(active_workers.keys())
             if active_workers
             else [],
-            "overall_status": "healthy"
-            if healthy_workers == total_workers and total_workers > 0
-            else "degraded",
             "timestamp": datetime.utcnow().isoformat(),
         }
 
