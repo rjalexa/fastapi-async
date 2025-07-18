@@ -8,7 +8,7 @@ A production-ready distributed task processing system built with FastAPI, Celery
 - **Circuit Breaker Protection**: Built-in circuit breaker for external API calls
 - **Advanced Retry Logic**: Intelligent retry scheduling with exponential backoff
 - **Health Monitoring**: Comprehensive health checks for workers and system components
-- **Real-time Monitoring**: Flower dashboard for task and worker monitoring
+- **Real-time Monitoring**: Built-in API endpoints for comprehensive system monitoring
 - **Production Ready**: Docker-based deployment with proper logging and error handling
 
 ## Quick Start
@@ -32,7 +32,7 @@ A production-ready distributed task processing system built with FastAPI, Celery
 
 4. **Access the services**
    - API Documentation: http://localhost:8000/docs
-   - Flower Monitoring: http://localhost:5555
+   - System Monitoring: http://localhost:8000/health
    - Frontend UI: http://localhost:3000
 
 ## Performance Management
@@ -178,12 +178,12 @@ docker compose logs worker
 curl http://localhost:8000/api/v1/queues/status
 ```
 
-#### Flower Dashboard
-Access the Flower monitoring dashboard at http://localhost:5555 to view:
-- Real-time task execution
-- Worker performance metrics
-- Queue depths and processing rates
-- Failed task analysis
+#### Built-in Monitoring Dashboard
+Access comprehensive monitoring through the API endpoints:
+- Queue status and depths: `GET /api/v1/queues/status`
+- Worker health and performance: `GET /health/workers`
+- Dead letter queue analysis: `GET /api/v1/queues/dlq`
+- Individual task details: `GET /api/v1/tasks/{task_id}`
 
 ### Troubleshooting Performance Issues
 
@@ -216,7 +216,7 @@ The system consists of several components:
 - **FastAPI Application**: REST API for task management
 - **Celery Workers**: Distributed task processors
 - **Redis**: Message broker and result backend
-- **Flower**: Web-based monitoring tool
+- **Custom Queue Consumer**: Intelligent task distribution system
 - **Circuit Breaker**: Protection against external service failures
 
 ### Task Flow Architecture
@@ -308,21 +308,26 @@ The system maintains multiple specialized queues:
 
 #### Monitoring Integration
 
-**Custom Queue Monitoring:**
+**Built-in API Monitoring:**
 ```bash
+# Queue status and depths
 curl http://localhost:8000/api/v1/queues/status
+
+# Worker health and performance
+curl http://localhost:8000/health/workers
+
+# Dead letter queue analysis
+curl http://localhost:8000/api/v1/queues/dlq
+
+# Individual task tracking
+curl http://localhost:8000/api/v1/tasks/{task_id}
 ```
-Shows tasks waiting in custom Redis queues (invisible to Flower)
 
-**Celery Monitoring (Flower):**
-- Visit http://localhost:5555
-- Shows tasks currently executing in Celery workers
-- Provides worker performance metrics
-
-**Complete System View:**
-- Custom endpoint shows queued tasks
-- Flower shows executing tasks  
-- Together they provide full pipeline visibility
+**Complete System Visibility:**
+- Real-time queue monitoring shows tasks waiting in custom Redis queues
+- Worker health endpoints provide performance metrics and circuit breaker status
+- Task lifecycle tracking from creation to completion
+- Comprehensive error analysis and retry management
 
 #### Architecture Benefits
 
@@ -390,7 +395,7 @@ curl -X POST http://localhost:8000/api/v1/tasks/ \
 2. **Resource Planning**: Set appropriate worker counts and resource limits
 3. **Monitoring**: Set up log aggregation and alerting
 4. **Backup**: Configure Redis persistence if needed
-5. **Security**: Use proper authentication for Flower dashboard
+5. **Security**: Configure proper network security and API authentication
 
 ## License
 
