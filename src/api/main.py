@@ -5,7 +5,6 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from celery import Celery
 
 from config import settings
 from routers import health, tasks, queues
@@ -13,13 +12,9 @@ from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
 
-# Create Celery app
-celery_app = Celery(
-    "asynctaskflow",
-    broker=settings.celery_broker_url,
-    backend=settings.celery_result_backend,
-    include=["tasks"],  # Make sure this points to your worker tasks
-)
+# Note: No Celery app needed in API anymore
+# Workers consume directly from Redis queues
+celery_app = None
 
 
 async def initialize_services() -> tuple:

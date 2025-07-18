@@ -56,6 +56,30 @@ print('All imports successful')
     fi
 }
 
+# Function to start consumer in background
+start_consumer() {
+    log "Starting Redis queue consumer..."
+    
+    # Start the consumer in the background
+    uv run python consumer.py &
+    CONSUMER_PID=$!
+    
+    log "Consumer started with PID: $CONSUMER_PID"
+    echo $CONSUMER_PID > /tmp/consumer.pid
+    
+    # Give consumer a moment to start
+    sleep 2
+    
+    # Check if consumer is still running
+    if kill -0 $CONSUMER_PID 2>/dev/null; then
+        log "Consumer is running successfully"
+        return 0
+    else
+        log "Consumer failed to start"
+        return 1
+    fi
+}
+
 # Function to start worker with retry logic
 start_worker_with_retry() {
     local max_retries=3
@@ -76,6 +100,19 @@ start_worker_with_retry() {
                 continue
             else
                 log "Max retries exceeded. Worker startup failed."
+                exit 1
+            fi
+        fi
+        
+        # Start the consumer first
+        if ! start_consumer; then
+            log "Consumer startup failed"
+            if [ $attempt -lt $max_retries ]; then
+                log "Retrying in $retry_delay seconds..."
+                sleep $retry_delay
+                continue
+            else
+                log "Max retries exceeded. Consumer startup failed."
                 exit 1
             fi
         fi
@@ -109,12 +146,19 @@ start_worker_with_retry() {
         
         log "Starting worker with command: uv run ${CELERY_ARGS[*]}"
         
-        # Start the worker
+        # Start the worker (this will block)
         if uv run "${CELERY_ARGS[@]}"; then
             log "Worker started successfully"
             return 0
         else
             log "Worker startup failed (attempt $attempt)"
+            # Kill consumer if worker fails
+            if [ -f /tmp/consumer.pid ]; then
+                CONSUMER_PID=$(cat /tmp/consumer.pid)
+                kill $CONSUMER_PID 2>/dev/null || true
+                rm -f /tmp/consumer.pid
+            fi
+            
             if [ $attempt -lt $max_retries ]; then
                 log "Retrying in $retry_delay seconds..."
                 sleep $retry_delay
@@ -125,6 +169,28 @@ start_worker_with_retry() {
         fi
     done
 }
+
+# Function to handle shutdown signals
+cleanup() {
+    log "Received shutdown signal, cleaning up..."
+    
+    # Kill consumer if running
+    if [ -f /tmp/consumer.pid ]; then
+        CONSUMER_PID=$(cat /tmp/consumer.pid)
+        log "Stopping consumer (PID: $CONSUMER_PID)..."
+        kill $CONSUMER_PID 2>/dev/null || true
+        rm -f /tmp/consumer.pid
+    fi
+    
+    # Kill any remaining processes
+    pkill -f "python consumer.py" 2>/dev/null || true
+    
+    log "Cleanup completed"
+    exit 0
+}
+
+# Set up signal handlers
+trap cleanup SIGTERM SIGINT
 
 # Main execution
 log "Environment check..."

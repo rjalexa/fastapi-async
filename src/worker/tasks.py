@@ -330,3 +330,84 @@ def process_scheduled_tasks() -> str:
 
     moved_count = asyncio.run(_run_processing())
     return f"Moved {moved_count} tasks from scheduled to retry queue."
+
+
+# --- Queue Consumer Task --------------------------------------------------
+
+
+def calculate_adaptive_retry_ratio(retry_depth: int) -> float:
+    """Calculate adaptive retry ratio based on queue pressure."""
+    if retry_depth < settings.retry_queue_warning:
+        return settings.default_retry_ratio  # Normal: 30%
+    elif retry_depth < settings.retry_queue_critical:
+        return 0.2  # Warning: 20%
+    else:
+        return 0.1  # Critical: 10%
+
+
+@app.task(name="consume_tasks", bind=True)
+def consume_tasks(self: Task) -> str:
+    """
+    Consumer task that pulls task IDs from Redis queues and processes them.
+    This runs in a continuous loop on each worker.
+    """
+    import logging
+    import redis
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting task consumer on worker {self.request.hostname}")
+    
+    # Use synchronous Redis for BLPOP
+    redis_conn = redis.from_url(settings.redis_url, decode_responses=True)
+    
+    processed_count = 0
+    
+    try:
+        while True:
+            try:
+                # Get current retry queue depth for adaptive ratio
+                retry_depth = redis_conn.llen("tasks:pending:retry")
+                retry_ratio = calculate_adaptive_retry_ratio(retry_depth)
+                
+                # Decide which queue to check first based on retry ratio
+                if random.random() > retry_ratio:
+                    # Try primary queue first (70% of the time by default)
+                    queues = ["tasks:pending:primary", "tasks:pending:retry"]
+                else:
+                    # Try retry queue first (30% of the time by default)
+                    queues = ["tasks:pending:retry", "tasks:pending:primary"]
+                
+                # Use BLPOP to wait for a task ID from either queue (timeout: 5 seconds)
+                result = redis_conn.blpop(queues, timeout=5)
+                
+                if result is None:
+                    # Timeout occurred, continue loop (this is normal)
+                    continue
+                
+                queue_name, task_id = result
+                logger.info(f"Received task {task_id} from {queue_name}")
+                
+                # Remove task from the queue it came from (already done by BLPOP)
+                # Now trigger the actual summarization task
+                summarize_task.delay(task_id)
+                
+                processed_count += 1
+                logger.info(f"Dispatched task {task_id} for processing (total: {processed_count})")
+                
+            except redis.RedisError as e:
+                logger.error(f"Redis error in consumer: {e}")
+                time.sleep(5)  # Wait before retrying
+                continue
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in consumer: {e}")
+                time.sleep(1)  # Brief pause before continuing
+                continue
+                
+    except KeyboardInterrupt:
+        logger.info("Consumer task interrupted, shutting down gracefully")
+        return f"Consumer stopped after processing {processed_count} tasks"
+    
+    except Exception as e:
+        logger.error(f"Consumer task failed: {e}")
+        raise

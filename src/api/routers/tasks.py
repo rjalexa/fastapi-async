@@ -44,9 +44,8 @@ async def create_task(
     try:
         task_id = await task_svc.create_task(task_data.content)
 
-        # Trigger Celery task
-        if celery_app:
-            celery_app.send_task("summarize_text", args=[task_id])
+        # Note: No need to trigger Celery task anymore
+        # Workers consume directly from Redis queues
 
         return TaskResponse(task_id=task_id, state="PENDING")
     except Exception as e:
@@ -112,8 +111,7 @@ async def retry_task(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to retry task"
         )
 
-    # Trigger Celery task
-    if celery_app:
-        celery_app.send_task("summarize_text", args=[task_id])
+    # Note: No need to trigger Celery task anymore
+    # Workers consume directly from Redis queues
 
     return TaskResponse(task_id=task_id, state="PENDING")
