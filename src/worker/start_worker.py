@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# src/worker/start_worker.py
 """Enhanced Celery worker startup script with monitoring enabled."""
 
 import os

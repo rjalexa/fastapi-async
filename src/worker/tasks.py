@@ -1,3 +1,4 @@
+# src/worker/tasks.py
 """
 Celery tasks for text summarization and task processing.
 
@@ -11,11 +12,9 @@ import os
 import random
 import time
 from datetime import datetime
-from typing import Optional
 
 import redis.asyncio as aioredis
 from celery import Celery, Task
-from celery.signals import worker_process_init
 from celery.worker.control import Panel
 
 from circuit_breaker import (
@@ -27,17 +26,24 @@ from config import settings
 
 # --- Custom Exceptions ----------------------------------------------------
 
+
 class TaskError(Exception):
     """Base exception for task errors."""
+
     pass
+
 
 class TransientError(TaskError):
     """Error that should trigger a retry."""
+
     pass
+
 
 class PermanentError(TaskError):
     """Error that should not trigger a retry."""
+
     pass
+
 
 # --- Constants ------------------------------------------------------------
 
@@ -54,10 +60,10 @@ ERROR_CLASSIFICATIONS = {
 
 RETRY_SCHEDULES = {
     "InsufficientCredits": [300, 600, 1800],  # 5min, 10min, 30min
-    "RateLimitError":      [60, 120, 300, 600],
-    "ServiceUnavailable":  [5, 10, 30, 60, 120],
-    "NetworkTimeout":      [2, 5, 10, 30, 60],
-    "Default":             [5, 15, 60, 300],
+    "RateLimitError": [60, 120, 300, 600],
+    "ServiceUnavailable": [5, 10, 30, 60, 120],
+    "NetworkTimeout": [2, 5, 10, 30, 60],
+    "Default": [5, 15, 60, 300],
 }
 
 # --- Celery App Setup -----------------------------------------------------
@@ -70,6 +76,7 @@ app = Celery(
 
 # --- Remote-Control Health Command (No changes needed) --------------------
 
+
 @Panel.register
 def get_worker_health(state, **kwargs):
     """Return health info for this worker (invoked via broadcast)."""
@@ -81,25 +88,32 @@ def get_worker_health(state, **kwargs):
         "timestamp": time.time(),
     }
 
+
 # --- Async Redis and State Management Helpers -----------------------------
+
 
 def get_async_redis_connection() -> aioredis.Redis:
     """Get an async Redis connection."""
     return aioredis.from_url(settings.redis_url, decode_responses=True)
+
 
 def classify_error(status_code: int, error_message: str) -> str:
     """Classify error as transient or permanent."""
     if status_code in ERROR_CLASSIFICATIONS:
         err_cls = ERROR_CLASSIFICATIONS[status_code]
         if err_cls is TransientError:
-            if status_code == 402: return "InsufficientCredits"
-            if status_code == 429: return "RateLimitError"
-            if status_code == 503: return "ServiceUnavailable"
+            if status_code == 402:
+                return "InsufficientCredits"
+            if status_code == 429:
+                return "RateLimitError"
+            if status_code == 503:
+                return "ServiceUnavailable"
             return "NetworkTimeout"
         return "PermanentError"
     # Fallback based on message content
     # (assuming this logic is sound for your use case)
     return "Default"
+
 
 def calculate_retry_delay(retry_count: int, error_type: str) -> float:
     """Calculate retry delay with exponential backoff and jitter."""
@@ -108,11 +122,14 @@ def calculate_retry_delay(retry_count: int, error_type: str) -> float:
     jitter = random.uniform(0, base_delay * 0.1)
     return base_delay + jitter
 
-async def update_task_state(redis_conn: aioredis.Redis, task_id: str, state: str, **kwargs) -> None:
+
+async def update_task_state(
+    redis_conn: aioredis.Redis, task_id: str, state: str, **kwargs
+) -> None:
     """Update task state and metadata in Redis asynchronously."""
     fields = {"state": state, "updated_at": datetime.utcnow().isoformat()}
     fields.update(kwargs)
-    
+
     # Serialize complex types
     for key, value in fields.items():
         if isinstance(value, (dict, list)):
@@ -122,7 +139,10 @@ async def update_task_state(redis_conn: aioredis.Redis, task_id: str, state: str
 
     await redis_conn.hset(f"task:{task_id}", mapping=fields)
 
-async def move_to_dlq(redis_conn: aioredis.Redis, task_id: str, reason: str, error_type: str = "Unknown") -> None:
+
+async def move_to_dlq(
+    redis_conn: aioredis.Redis, task_id: str, reason: str, error_type: str = "Unknown"
+) -> None:
     """Move a task to the dead-letter queue asynchronously."""
     await update_task_state(
         redis_conn,
@@ -130,9 +150,10 @@ async def move_to_dlq(redis_conn: aioredis.Redis, task_id: str, reason: str, err
         "DLQ",
         last_error=reason,
         error_type=error_type,
-        completed_at=datetime.utcnow().isoformat()
+        completed_at=datetime.utcnow().isoformat(),
     )
     await redis_conn.lpush("dlq:tasks", task_id)
+
 
 async def schedule_task_for_retry(
     redis_conn: aioredis.Redis, task_id: str, retry_count: int, exc: Exception
@@ -153,6 +174,7 @@ async def schedule_task_for_retry(
     )
     await redis_conn.zadd("tasks:scheduled", {task_id: retry_at_timestamp})
 
+
 async def summarize_text_with_pybreaker(content: str) -> str:
     """Summarize text via OpenRouter protected by a circuit breaker."""
     if not settings.openrouter_api_key:
@@ -163,7 +185,7 @@ async def summarize_text_with_pybreaker(content: str) -> str:
         msg = str(e)
         if "circuit breaker" in msg.lower():
             raise TransientError(f"Circuit breaker protection: {msg}")
-        
+
         # Simple status code parsing
         code = 0
         if "status_code=" in msg:
@@ -180,7 +202,9 @@ async def summarize_text_with_pybreaker(content: str) -> str:
             exc.status_code = code
             raise exc
 
+
 # --- Celery Tasks ---------------------------------------------------------
+
 
 @app.task(name="summarize_text", bind=True)
 def summarize_task(self: Task, task_id: str) -> str:
@@ -189,7 +213,7 @@ def summarize_task(self: Task, task_id: str) -> str:
     `bind=True` provides access to the task instance via `self`.
     """
     redis_conn = get_async_redis_connection()
-    retry_count = self.request.retries # Use Celery's built-in retry counter
+    retry_count = self.request.retries  # Use Celery's built-in retry counter
 
     async def _run_task():
         data = await redis_conn.hgetall(f"task:{task_id}")
@@ -199,21 +223,23 @@ def summarize_task(self: Task, task_id: str) -> str:
         content = data.get("content", "")
         if not content:
             raise PermanentError("No content to summarize.")
-        
+
         # Check for max retries before execution
         if retry_count >= settings.max_retries:
             raise PermanentError(f"Max retries ({settings.max_retries}) exceeded.")
 
-        await update_task_state(redis_conn, task_id, "ACTIVE", worker_id=self.request.hostname)
-        
+        await update_task_state(
+            redis_conn, task_id, "ACTIVE", worker_id=self.request.hostname
+        )
+
         result = await summarize_text_with_pybreaker(content)
-        
+
         await update_task_state(
             redis_conn,
             task_id,
             "COMPLETED",
             result=result,
-            completed_at=datetime.utcnow().isoformat()
+            completed_at=datetime.utcnow().isoformat(),
         )
         return f"Task {task_id} completed successfully."
 
@@ -239,15 +265,17 @@ def process_scheduled_tasks() -> str:
     Periodically run by Celery Beat to move scheduled tasks back to the pending queue.
     """
     redis_conn = get_async_redis_connection()
-    
+
     async def _run_processing():
         now = time.time()
         # Get up to 100 tasks that are due to be retried
-        due_tasks = await redis_conn.zrangebyscore("tasks:scheduled", 0, now, start=0, num=100)
-        
+        due_tasks = await redis_conn.zrangebyscore(
+            "tasks:scheduled", 0, now, start=0, num=100
+        )
+
         if not due_tasks:
             return 0
-        
+
         # Use a pipeline for efficiency
         async with redis_conn.pipeline() as pipe:
             for task_id in due_tasks:
@@ -256,7 +284,7 @@ def process_scheduled_tasks() -> str:
                 # Update state to PENDING so the UI reflects it's ready to be picked up
                 await update_task_state(redis_conn, task_id, "PENDING")
             await pipe.execute()
-        
+
         return len(due_tasks)
 
     moved_count = asyncio.run(_run_processing())
@@ -268,6 +296,10 @@ def reset_worker_circuit_breaker() -> dict:
     """Manually reset the circuit breaker on this worker."""
     try:
         reset_circuit_breaker()
-        return {"status": "success", "message": "Circuit breaker reset.", "new_state": get_circuit_breaker_status()}
+        return {
+            "status": "success",
+            "message": "Circuit breaker reset.",
+            "new_state": get_circuit_breaker_status(),
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}

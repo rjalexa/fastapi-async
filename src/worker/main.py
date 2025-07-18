@@ -1,3 +1,4 @@
+# src/worker/main.py
 """Celery application main module."""
 
 import logging

@@ -1,3 +1,4 @@
+# docker-compose.yml
 # Common configurations using YAML anchors
 x-worker-common: &worker-common
   build:

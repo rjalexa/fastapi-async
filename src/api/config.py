@@ -1,3 +1,4 @@
+# src/api/config.py
 """Configuration settings for the API service."""
 
 from typing import Optional

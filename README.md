@@ -1,3 +1,4 @@
+<!-- README.md -->
 # AsyncTaskFlow
 
 A production-ready distributed task processing system built with FastAPI, Redis, and Celery. Implements robust architecture for handling long-running text summarization tasks via OpenRouter API, featuring comprehensive error handling, circuit breaker patterns, retry mechanisms, and dead letter queue management.

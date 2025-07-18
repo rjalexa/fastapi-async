@@ -1,3 +1,4 @@
+# src/worker/config.py
 """Configuration settings for the worker service."""
 
 from typing import Optional

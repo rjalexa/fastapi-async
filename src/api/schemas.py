@@ -1,3 +1,4 @@
+# src/api/schemas.py
 """Pydantic schemas for API request/response models."""
 
 from datetime import datetime
