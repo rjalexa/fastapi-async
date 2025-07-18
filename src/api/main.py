@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from routers import health, tasks, queues, summarize
@@ -92,6 +93,15 @@ app = FastAPI(
     docs_url=settings.docs_url,
     redoc_url=settings.redoc_url,
     lifespan=lifespan,
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Set Celery app in task routers

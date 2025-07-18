@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { QueueStatus, SSEMessage, apiService } from '../lib/api';
 import TaskFlowGraph from '../components/dashboard/TaskFlowGraph';
 import QueueStats from '../components/dashboard/QueueStats';
+import WorkerStats from '../components/dashboard/WorkerStats';
 
 const Dashboard: React.FC = () => {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
@@ -90,15 +91,26 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
+  const getConnectionStatus = () => {
+    if (isConnected) return { text: 'Connected', color: 'bg-green-500' };
+    if (lastUpdate) return { text: 'Trying...', color: 'bg-yellow-500' };
+    return { text: 'Disconnected', color: 'bg-red-500' };
+  };
+
+  const connectionStatus = getConnectionStatus();
+
   return (
     <div className="space-y-6">
-      {/* Header with last update info */}
+      {/* Header with compact status pill */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-600">
-            Real-time overview of task processing system
-          </p>
+          <div className="flex items-center space-x-2 px-3 py-1 rounded-full bg-gray-100">
+            <div className={`w-2 h-2 rounded-full ${connectionStatus.color}`}></div>
+            <span className="text-sm font-medium text-gray-700">
+              {connectionStatus.text}
+            </span>
+          </div>
         </div>
         {lastUpdate && (
           <div className="text-right">
@@ -110,23 +122,19 @@ const Dashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Main dashboard content */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Left column - Queue Stats */}
-        <div className="xl:col-span-1">
-          <QueueStats queueStatus={queueStatus} isConnected={isConnected} />
-        </div>
-
-        {/* Right column - Task Flow Graph */}
-        <div className="xl:col-span-2">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Task Flow Overview
-            </h3>
-            <TaskFlowGraph queueStatus={queueStatus} />
-          </div>
-        </div>
+      {/* Task Flow Graph - moved to top */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Task Flow Overview
+        </h3>
+        <TaskFlowGraph queueStatus={queueStatus} />
       </div>
+
+      {/* Queue Stats - moved below */}
+      <QueueStats queueStatus={queueStatus} isConnected={isConnected} />
+
+      {/* Worker Stats */}
+      <WorkerStats isConnected={isConnected} />
 
       {/* Connection status warning */}
       {!isConnected && (

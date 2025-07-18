@@ -25,10 +25,10 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     {
       id: 'submit',
       type: 'input',
-      position: { x: 50, y: 150 },
+      position: { x: 50, y: 200 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Task Submit</div>
           </div>
         )
@@ -39,15 +39,16 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'primary-queue',
-      position: { x: 250, y: 150 },
+      position: { x: 250, y: 200 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Primary Queue</div>
             <div className="text-lg font-bold">{queueStatus?.queues.primary || 0}</div>
           </div>
@@ -59,76 +60,80 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'processing',
-      position: { x: 450, y: 150 },
+      position: { x: 450, y: 200 },
       data: { 
         label: (
-          <div className="text-center">
-            <div className="font-semibold">Processing</div>
-            <div className="text-lg font-bold">{queueStatus?.states.processing || 0}</div>
+          <div className="text-center text-gray-800">
+            <div className="font-semibold">Active</div>
+            <div className="text-lg font-bold">{queueStatus?.states.ACTIVE || 0}</div>
           </div>
         )
       },
       style: {
-        background: queueStatus?.states.processing ? '#e8f5e8' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.processing ? '#4caf50' : '#bdbdbd'}`,
+        background: queueStatus?.states.ACTIVE ? '#e8f5e8' : '#f5f5f5',
+        border: `2px solid ${queueStatus?.states.ACTIVE ? '#4caf50' : '#bdbdbd'}`,
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'completed',
       type: 'output',
-      position: { x: 650, y: 50 },
+      position: { x: 650, y: 100 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Completed</div>
-            <div className="text-lg font-bold">{queueStatus?.states.completed || 0}</div>
+            <div className="text-lg font-bold">{queueStatus?.states.COMPLETED || 0}</div>
           </div>
         )
       },
       style: {
-        background: queueStatus?.states.completed ? '#e8f5e8' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.completed ? '#2e7d32' : '#bdbdbd'}`,
+        background: queueStatus?.states.COMPLETED ? '#e8f5e8' : '#f5f5f5',
+        border: `2px solid ${queueStatus?.states.COMPLETED ? '#2e7d32' : '#bdbdbd'}`,
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'failed',
-      position: { x: 650, y: 250 },
+      position: { x: 650, y: 300 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Failed</div>
-            <div className="text-lg font-bold">{queueStatus?.states.failed || 0}</div>
+            <div className="text-lg font-bold">{queueStatus?.states.FAILED || 0}</div>
           </div>
         )
       },
       style: {
-        background: queueStatus?.states.failed ? '#ffebee' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.failed ? '#d32f2f' : '#bdbdbd'}`,
+        background: queueStatus?.states.FAILED ? '#ffebee' : '#f5f5f5',
+        border: `2px solid ${queueStatus?.states.FAILED ? '#d32f2f' : '#bdbdbd'}`,
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'retry-queue',
-      position: { x: 450, y: 350 },
+      position: { x: 450, y: 400 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Retry Queue</div>
             <div className="text-lg font-bold">{queueStatus?.queues.retry || 0}</div>
           </div>
@@ -140,15 +145,16 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'scheduled-queue',
-      position: { x: 250, y: 350 },
+      position: { x: 250, y: 400 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Scheduled Queue</div>
             <div className="text-lg font-bold">{queueStatus?.queues.scheduled || 0}</div>
           </div>
@@ -160,16 +166,17 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     },
     {
       id: 'dlq',
       type: 'output',
-      position: { x: 650, y: 400 },
+      position: { x: 650, y: 450 },
       data: { 
         label: (
-          <div className="text-center">
+          <div className="text-center text-gray-800">
             <div className="font-semibold">Dead Letter Queue</div>
             <div className="text-lg font-bold">{queueStatus?.queues.dlq || 0}</div>
           </div>
@@ -181,7 +188,8 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         borderRadius: '8px',
         padding: '10px',
         minWidth: '120px',
-        textAlign: 'center'
+        textAlign: 'center',
+        color: '#1a1a1a'
       }
     }
   ], [queueStatus]);
