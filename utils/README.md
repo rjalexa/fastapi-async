@@ -184,6 +184,111 @@ python3 -m pip install httpx redis --user
 uv add --dev httpx redis
 ```
 
+### `initialize_counters.py`
+
+Utility to initialize Redis state counters for the new efficient counter system.
+
+This script scans all existing tasks and creates Redis counters that match the current state distribution. Run this once when deploying the new counter-based queue monitoring system.
+
+#### Usage
+
+```bash
+# Initialize counters based on existing tasks
+python3 utils/initialize_counters.py
+```
+
+#### Features
+
+- Scans all existing `task:*` keys in Redis
+- Counts tasks by state (PENDING, ACTIVE, COMPLETED, FAILED, DLQ)
+- Creates efficient Redis counters (`metrics:tasks:state:*`)
+- Provides progress updates for large datasets
+- Verifies counter accuracy after initialization
+
+#### When to Use
+
+- When first deploying the new counter system
+- After data migrations or system upgrades
+- When counters become out of sync with actual task states
+
+### `test_realtime_updates.py`
+
+Test utility for the real-time Server-Sent Events (SSE) queue monitoring system.
+
+This script connects to the SSE endpoint and displays real-time updates as they occur, useful for testing the WebSocket-like functionality without a frontend.
+
+#### Usage
+
+```bash
+# Connect to local API server
+python3 utils/test_realtime_updates.py
+
+# Make sure the API server is running on localhost:8000
+```
+
+#### Features
+
+- Connects to `/api/v1/queues/status/stream` endpoint
+- Displays real-time queue and task state updates
+- Shows initial status, task creation, and state changes
+- Handles heartbeat messages and error conditions
+- Formatted output with timestamps
+
+#### Example Output
+
+```
+[14:30:15] initial_status
+  Initial Status:
+    Queues: {'primary': 5, 'retry': 2, 'scheduled': 0, 'dlq': 1}
+    States: {'PENDING': 7, 'ACTIVE': 1, 'COMPLETED': 45, 'FAILED': 0, 'DLQ': 1}
+    Retry Ratio: 0.30
+
+[14:30:22] task_created
+  Task Created: 550e8400-e29b-41d4-a716-446655440000
+    Queue Depths: {'primary': 6, 'retry': 2, 'scheduled': 0, 'dlq': 1}
+    State Counts: {'PENDING': 8, 'ACTIVE': 1, 'COMPLETED': 45, 'FAILED': 0, 'DLQ': 1}
+
+[14:30:25] task_state_changed
+  Task: 550e8400-e29b-41d4-a716-446655440000
+    State: PENDING → ACTIVE
+    Queue Depths: {'primary': 5, 'retry': 2, 'scheduled': 0, 'dlq': 1}
+    State Counts: {'PENDING': 7, 'ACTIVE': 2, 'COMPLETED': 45, 'FAILED': 0, 'DLQ': 1}
+```
+
+#### Dependencies
+
+Requires `aiohttp` for async HTTP client functionality:
+
+```bash
+python3 -m pip install aiohttp --user
+```
+
 ## Development
 
 When adding new API endpoints, make sure to update `test_api_endpoints.py` to include tests for the new endpoints.
+
+### Real-time System Testing
+
+To test the complete real-time monitoring system:
+
+1. **Start the API server:**
+   ```bash
+   docker compose up api
+   ```
+
+2. **Initialize counters (first time only):**
+   ```bash
+   python3 utils/initialize_counters.py
+   ```
+
+3. **Start the real-time monitor:**
+   ```bash
+   python3 utils/test_realtime_updates.py
+   ```
+
+4. **Create test tasks in another terminal:**
+   ```bash
+   python3 utils/test_api_endpoints.py
+   ```
+
+5. **Watch real-time updates** in the monitor terminal as tasks are created and processed.

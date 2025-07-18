@@ -1,12 +1,17 @@
 # src/api/routers/queues.py
 """Queue monitoring API endpoints."""
 
+import asyncio
+import json
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+import redis.asyncio as aioredis
 
 from schemas import QueueStatus, TaskDetail, QueueName
-from services import queue_service
+from services import queue_service, redis_service
+from config import settings
 
 router = APIRouter(prefix="/api/v1/queues", tags=["queues"])
 
@@ -134,3 +139,109 @@ async def get_dlq_tasks(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get DLQ tasks: {str(e)}",
         )
+
+
+@router.get("/status/stream")
+async def stream_queue_status():
+    """
+    Server-Sent Events endpoint for real-time queue status updates.
+    
+    This endpoint maintains an open connection and streams queue status changes
+    in real-time using Redis pub/sub. The frontend can connect to this endpoint
+    to receive live updates when tasks are created, completed, or change state.
+    
+    Returns:
+    - Server-Sent Events stream with queue status updates
+    """
+    async def event_generator():
+        # Create a dedicated Redis connection for pub/sub
+        pubsub_redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = pubsub_redis.pubsub()
+        
+        try:
+            # Subscribe to queue updates channel
+            await pubsub.subscribe("queue-updates")
+            
+            # Send initial queue status
+            if queue_service:
+                try:
+                    initial_status = await queue_service.get_queue_status()
+                    initial_data = {
+                        "type": "initial_status",
+                        "queue_depths": initial_status.queues,
+                        "state_counts": initial_status.states,
+                        "retry_ratio": initial_status.retry_ratio,
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    yield f"data: {json.dumps(initial_data)}\n\n"
+                except Exception as e:
+                    error_data = {
+                        "type": "error",
+                        "message": f"Failed to get initial status: {str(e)}",
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+            
+            # Listen for updates
+            while True:
+                try:
+                    # Wait for message with timeout to allow periodic heartbeat
+                    message = await asyncio.wait_for(pubsub.get_message(), timeout=30.0)
+                    
+                    if message and message["type"] == "message":
+                        # Forward the update to the client
+                        update_data = json.loads(message["data"])
+                        yield f"data: {json.dumps(update_data)}\n\n"
+                    elif message is None:
+                        # Timeout occurred, send heartbeat
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "timestamp": asyncio.get_event_loop().time()
+                        }
+                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        
+                except asyncio.TimeoutError:
+                    # Send heartbeat on timeout
+                    heartbeat_data = {
+                        "type": "heartbeat", 
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                    
+                except Exception as e:
+                    # Send error and continue
+                    error_data = {
+                        "type": "error",
+                        "message": str(e),
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                    
+        except Exception as e:
+            # Final error before closing
+            error_data = {
+                "type": "fatal_error",
+                "message": str(e),
+                "timestamp": asyncio.get_event_loop().time()
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+            
+        finally:
+            # Clean up
+            try:
+                await pubsub.unsubscribe("queue-updates")
+                await pubsub.close()
+                await pubsub_redis.close()
+            except Exception:
+                pass  # Ignore cleanup errors
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )

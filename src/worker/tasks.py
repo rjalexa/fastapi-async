@@ -172,6 +172,10 @@ async def update_task_state(
     fields = {"state": state, "updated_at": current_time}
     fields.update(kwargs)
 
+    # Get current state for counter updates
+    current_task_data = await redis_conn.hgetall(f"task:{task_id}")
+    old_state = current_task_data.get("state") if current_task_data else None
+
     # Add state-specific timestamps
     if state == "ACTIVE":
         fields["started_at"] = current_time
@@ -255,7 +259,49 @@ async def update_task_state(
         elif value is not None:
             fields[key] = str(value)
 
-    await redis_conn.hset(f"task:{task_id}", mapping=fields)
+    # Update task data and counters atomically
+    async with redis_conn.pipeline(transaction=True) as pipe:
+        # Update task data
+        await pipe.hset(f"task:{task_id}", mapping=fields)
+        
+        # Update state counters
+        if old_state and old_state.lower() != state.lower():
+            await pipe.decrby(f"metrics:tasks:state:{old_state.lower()}", 1)
+        await pipe.incrby(f"metrics:tasks:state:{state.lower()}", 1)
+        
+        await pipe.execute()
+
+    # Publish real-time update
+    try:
+        # Get current queue depths for the update
+        queue_depths = {}
+        queue_depths["primary"] = await redis_conn.llen("tasks:pending:primary")
+        queue_depths["retry"] = await redis_conn.llen("tasks:pending:retry")
+        queue_depths["scheduled"] = await redis_conn.zcard("tasks:scheduled")
+        queue_depths["dlq"] = await redis_conn.llen("dlq:tasks")
+        
+        # Get current state counts
+        state_counts = {}
+        for state_name in ["pending", "active", "completed", "failed", "dlq"]:
+            count = await redis_conn.get(f"metrics:tasks:state:{state_name}")
+            state_counts[state_name.upper()] = int(count) if count else 0
+        
+        # Publish update
+        update_data = {
+            "type": "task_state_changed",
+            "task_id": task_id,
+            "old_state": old_state,
+            "new_state": state,
+            "queue_depths": queue_depths,
+            "state_counts": state_counts,
+            "timestamp": current_time
+        }
+        
+        await redis_conn.publish("queue-updates", json.dumps(update_data))
+        
+    except Exception as e:
+        # Don't fail the task update if publishing fails
+        print(f"Warning: Failed to publish queue update: {e}")
 
 
 async def move_to_dlq(
