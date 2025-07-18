@@ -36,7 +36,7 @@ app.conf.update(
     result_expires=3600,  # 1 hour
     # Task routing
     task_routes={
-        "summarize_task": {"queue": "default"},
+        "summarize_text": {"queue": "default"},
         "process_scheduled_tasks": {"queue": "scheduler"},
     },
     # Beat schedule for periodic tasks
@@ -47,10 +47,6 @@ app.conf.update(
         },
     },
 )
-
-# Register tasks
-app.task(summarize_task, name="summarize_task")
-app.task(process_scheduled_tasks, name="process_scheduled_tasks")
 
 if __name__ == "__main__":
     app.start()

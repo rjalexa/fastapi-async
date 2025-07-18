@@ -46,7 +46,7 @@ async def create_task(
 
         # Trigger Celery task
         if celery_app:
-            celery_app.send_task("summarize_task", args=[task_id])
+            celery_app.send_task("summarize_text", args=[task_id])
 
         return TaskResponse(task_id=task_id, state="PENDING")
     except Exception as e:
@@ -114,6 +114,6 @@ async def retry_task(
 
     # Trigger Celery task
     if celery_app:
-        celery_app.send_task("summarize_task", args=[task_id])
+        celery_app.send_task("summarize_text", args=[task_id])
 
     return TaskResponse(task_id=task_id, state="PENDING")
