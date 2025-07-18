@@ -323,6 +323,32 @@ curl http://localhost:8000/api/v1/queues/dlq
 curl http://localhost:8000/api/v1/tasks/{task_id}
 ```
 
+**Understanding Queue Status vs Task States:**
+
+The `/api/v1/queues/status` endpoint returns two distinct types of information:
+
+```json
+{
+  "queues": {
+    "primary": 0,
+    "retry": 0,
+    "scheduled": 0,
+    "dlq": 0
+  },
+  "states": {
+    "COMPLETED": 10,
+    "FAILED": 2
+  },
+  "retry_ratio": 0.3
+}
+```
+
+- **`queues`**: Shows the number of task IDs currently waiting in Redis lists/sets for processing. These are tasks that need some action (processing, retrying, etc.). When tasks complete successfully, they are removed from all queues, so completed tasks don't appear here.
+
+- **`states`**: Shows the count of all tasks by their current status, regardless of queue membership. This is calculated by scanning all `task:{task_id}` records in Redis and counting their `state` field values. Completed tasks remain in the system for result retrieval via the API.
+
+This design separates "work to be done" (queues) from "historical record keeping" (task states), allowing you to monitor both active workload and overall system activity.
+
 **Complete System Visibility:**
 - Real-time queue monitoring shows tasks waiting in custom Redis queues
 - Worker health endpoints provide performance metrics and circuit breaker status
