@@ -72,6 +72,8 @@ async def lifespan(app: FastAPI):
 
     except Exception as e:
         print(f"❌ Failed to initialize services: {e}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
         # Don't raise - let the app start but mark services as unavailable
         services.redis_service = None
         services.task_service = None
@@ -99,8 +101,8 @@ app = FastAPI(
 
 # Include routers
 app.include_router(health.router)
-app.include_router(tasks.router, prefix="/api/v1")
-app.include_router(queues.router, prefix="/api/v1")
+app.include_router(tasks.router)
+app.include_router(queues.router)
 
 
 @app.get("/")
