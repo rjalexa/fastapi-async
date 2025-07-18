@@ -11,7 +11,7 @@ import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
-from schemas import QueueStatus, TaskDetail, TaskState
+from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP
 
 
 class RedisService:
@@ -64,7 +64,7 @@ class TaskService:
         async with self.redis.pipeline(transaction=True) as pipe:
             # Store task metadata and queue in primary queue atomically
             await pipe.hset(f"task:{task_id}", mapping=task_data)
-            await pipe.lpush("tasks:pending:primary", task_id)
+            await pipe.lpush(QUEUE_KEY_MAP[QueueName.PRIMARY], task_id)
             await pipe.execute()
 
         return task_id
@@ -130,7 +130,7 @@ class TaskService:
         await self.redis.hset(f"task:{task_id}", mapping=updates)
 
         # Queue in retry queue
-        await self.redis.lpush("tasks:pending:retry", task_id)
+        await self.redis.lpush(QUEUE_KEY_MAP[QueueName.RETRY], task_id)
 
         return True
 
@@ -145,19 +145,19 @@ class TaskService:
             queued_task_ids = set()
             
             # Check primary queue
-            primary_tasks = await self.redis.lrange("tasks:pending:primary", 0, -1)
+            primary_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.PRIMARY], 0, -1)
             queued_task_ids.update(primary_tasks)
             
             # Check retry queue
-            retry_tasks = await self.redis.lrange("tasks:pending:retry", 0, -1)
+            retry_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.RETRY], 0, -1)
             queued_task_ids.update(retry_tasks)
             
             # Check scheduled queue (sorted set)
-            scheduled_tasks = await self.redis.zrange("tasks:scheduled", 0, -1)
+            scheduled_tasks = await self.redis.zrange(QUEUE_KEY_MAP[QueueName.SCHEDULED], 0, -1)
             queued_task_ids.update(scheduled_tasks)
             
             # Check DLQ
-            dlq_tasks = await self.redis.lrange("dlq:tasks", 0, -1)
+            dlq_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.DLQ], 0, -1)
             queued_task_ids.update(dlq_tasks)
 
             # Scan all task keys to find orphaned ones
@@ -172,7 +172,7 @@ class TaskService:
                     
                     try:
                         # Re-queue the orphaned task in primary queue
-                        await self.redis.lpush("tasks:pending:primary", task_id)
+                        await self.redis.lpush(QUEUE_KEY_MAP[QueueName.PRIMARY], task_id)
                         
                         # Update the task's updated_at timestamp
                         await self.redis.hset(key, "updated_at", datetime.utcnow().isoformat())
@@ -208,17 +208,17 @@ class QueueService:
 
     async def get_queue_status(self) -> QueueStatus:
         """Get comprehensive queue status."""
-        # Get queue depths
-        primary_depth = await self.redis.llen("tasks:pending:primary")
-        retry_depth = await self.redis.llen("tasks:pending:retry")
-        scheduled_count = await self.redis.zcard("tasks:scheduled")
-        dlq_depth = await self.redis.llen("dlq:tasks")
+        # Get queue depths using centralized key mapping
+        primary_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
+        retry_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.RETRY])
+        scheduled_count = await self.redis.zcard(QUEUE_KEY_MAP[QueueName.SCHEDULED])
+        dlq_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.DLQ])
 
         queues = {
-            "primary": primary_depth,
-            "retry": retry_depth,
-            "scheduled": scheduled_count,
-            "dlq": dlq_depth,
+            QueueName.PRIMARY.value: primary_depth,
+            QueueName.RETRY.value: retry_depth,
+            QueueName.SCHEDULED.value: scheduled_count,
+            QueueName.DLQ.value: dlq_depth,
         }
 
         # Get task counts by state
@@ -235,7 +235,7 @@ class QueueService:
 
     async def get_dlq_tasks(self, limit: int = 100) -> List[TaskDetail]:
         """Get tasks from dead letter queue."""
-        task_ids = await self.redis.lrange("dlq:tasks", 0, limit - 1)
+        task_ids = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.DLQ], 0, limit - 1)
         tasks = []
 
         for task_id in task_ids:
@@ -279,6 +279,25 @@ class QueueService:
                 tasks.append(task_detail)
 
         return tasks
+
+    async def list_tasks_in_queue(self, queue_name: str, limit: int = 10) -> List[str]:
+        """Get a list of task IDs from a specific queue."""
+        # Convert string queue name to enum for lookup
+        try:
+            queue_enum = QueueName(queue_name)
+        except ValueError:
+            return []
+        
+        queue_key = QUEUE_KEY_MAP.get(queue_enum)
+        if not queue_key:
+            return []
+
+        if queue_enum == QueueName.SCHEDULED:
+            # Scheduled queue is a sorted set
+            return await self.redis.zrange(queue_key, 0, limit - 1)
+        else:
+            # Other queues are lists
+            return await self.redis.lrange(queue_key, 0, limit - 1)
 
     def _calculate_adaptive_retry_ratio(self, retry_depth: int) -> float:
         """Calculate adaptive retry ratio based on queue pressure."""

@@ -18,6 +18,24 @@ class TaskState(str, Enum):
     DLQ = "DLQ"
 
 
+class QueueName(str, Enum):
+    """Enum for the different task queues."""
+    
+    PRIMARY = "primary"
+    RETRY = "retry"
+    SCHEDULED = "scheduled"
+    DLQ = "dlq"
+
+
+# Centralized mapping from queue names to Redis keys
+QUEUE_KEY_MAP = {
+    QueueName.PRIMARY: "tasks:pending:primary",
+    QueueName.RETRY: "tasks:pending:retry",
+    QueueName.SCHEDULED: "tasks:scheduled",
+    QueueName.DLQ: "dlq:tasks",
+}
+
+
 class TaskCreate(BaseModel):
     """Schema for creating a new task."""
 
