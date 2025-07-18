@@ -20,12 +20,12 @@ interface TaskFlowGraphProps {
 }
 
 const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
-  // Define the initial nodes based on the task flow
+  // Define the initial nodes based on the task flow - matching the exact layout from the image
   const initialNodes: Node[] = useMemo(() => [
     {
       id: 'submit',
       type: 'input',
-      position: { x: 50, y: 200 },
+      position: { x: 335, y: 50 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -45,7 +45,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     },
     {
       id: 'primary-queue',
-      position: { x: 250, y: 200 },
+      position: { x: 335, y: 150 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -66,7 +66,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     },
     {
       id: 'processing',
-      position: { x: 450, y: 200 },
+      position: { x: 435, y: 250 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -88,7 +88,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     {
       id: 'completed',
       type: 'output',
-      position: { x: 650, y: 100 },
+      position: { x: 240, y: 350 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -109,7 +109,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     },
     {
       id: 'failed',
-      position: { x: 650, y: 300 },
+      position: { x: 630, y: 350 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -129,29 +129,8 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       }
     },
     {
-      id: 'retry-queue',
-      position: { x: 450, y: 400 },
-      data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Retry Queue</div>
-            <div className="text-lg font-bold">{queueStatus?.queues.retry || 0}</div>
-          </div>
-        )
-      },
-      style: {
-        background: queueStatus?.queues.retry ? '#fff8e1' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.queues.retry ? '#ffa000' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
-    },
-    {
       id: 'scheduled-queue',
-      position: { x: 250, y: 400 },
+      position: { x: 550, y: 470 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -173,7 +152,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     {
       id: 'dlq',
       type: 'output',
-      position: { x: 650, y: 450 },
+      position: { x: 720, y: 470 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -191,17 +170,38 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         textAlign: 'center',
         color: '#1a1a1a'
       }
+    },
+    {
+      id: 'retry-queue',
+      position: { x: 435, y: 570 },
+      data: { 
+        label: (
+          <div className="text-center text-gray-800">
+            <div className="font-semibold">Retry Queue</div>
+            <div className="text-lg font-bold">{queueStatus?.queues.retry || 0}</div>
+          </div>
+        )
+      },
+      style: {
+        background: queueStatus?.queues.retry ? '#fff8e1' : '#f5f5f5',
+        border: `2px solid ${queueStatus?.queues.retry ? '#ffa000' : '#bdbdbd'}`,
+        borderRadius: '8px',
+        padding: '10px',
+        minWidth: '120px',
+        textAlign: 'center',
+        color: '#1a1a1a'
+      }
     }
   ], [queueStatus]);
 
-  // Define the edges (connections between nodes)
+  // Define the edges (connections between nodes) - matching the exact layout from the image
   const initialEdges: Edge[] = useMemo(() => [
     {
       id: 'submit-primary',
       source: 'submit',
       target: 'primary-queue',
       animated: true,
-      style: { stroke: '#1976d2', strokeWidth: 2 }
+      style: { stroke: '#1976d2', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'primary-processing',
@@ -215,7 +215,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       source: 'processing',
       target: 'completed',
       animated: true,
-      style: { stroke: '#4caf50', strokeWidth: 2 }
+      style: { stroke: '#4caf50', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'processing-failed',
@@ -225,32 +225,32 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       style: { stroke: '#d32f2f', strokeWidth: 2 }
     },
     {
-      id: 'failed-retry',
+      id: 'failed-scheduled',
       source: 'failed',
-      target: 'retry-queue',
-      animated: true,
-      style: { stroke: '#ffa000', strokeWidth: 2 }
-    },
-    {
-      id: 'retry-scheduled',
-      source: 'retry-queue',
       target: 'scheduled-queue',
       animated: true,
-      style: { stroke: '#7b1fa2', strokeWidth: 2 }
-    },
-    {
-      id: 'scheduled-primary',
-      source: 'scheduled-queue',
-      target: 'primary-queue',
-      animated: true,
-      style: { stroke: '#7b1fa2', strokeWidth: 2 }
+      style: { stroke: '#7b1fa2', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'failed-dlq',
       source: 'failed',
       target: 'dlq',
       animated: true,
-      style: { stroke: '#c62828', strokeWidth: 2 }
+      style: { stroke: '#c62828', strokeWidth: 2, strokeDasharray: '5,5' }
+    },
+    {
+      id: 'scheduled-retry',
+      source: 'scheduled-queue',
+      target: 'retry-queue',
+      animated: true,
+      style: { stroke: '#7b1fa2', strokeWidth: 2, strokeDasharray: '5,5' }
+    },
+    {
+      id: 'retry-processing',
+      source: 'retry-queue',
+      target: 'processing',
+      animated: true,
+      style: { stroke: '#ffa000', strokeWidth: 2, strokeDasharray: '5,5' }
     }
   ], []);
 
