@@ -147,5 +147,21 @@ services:
     labels:
       - "com.asynctaskflow.service=frontend"
 
+  reset:
+    build:
+      context: .
+      dockerfile: ./src/api/Dockerfile
+    environment:
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./utils:/app/utils
+    working_dir: /app
+    command: uv run python utils/reset_redis.py
+    profiles:
+      - tools
+
 volumes:
   redis_data:

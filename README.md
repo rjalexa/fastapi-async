@@ -404,6 +404,53 @@ docker compose logs -f
 docker compose build && docker compose up -d
 ```
 
+### System Reset
+
+During development, you may need to completely reset the system state by clearing all Redis data (queues, task metadata, etc.):
+
+```bash
+# Reset Redis data using Docker Compose (recommended)
+docker compose run --rm reset --confirm
+
+# Or inspect current state first (without resetting)
+docker compose run --rm reset
+
+# Alternative: Run reset script directly (if Redis is accessible locally)
+python utils/reset_redis.py --confirm
+```
+
+The reset utility will:
+- Show current Redis state (queue lengths, task counts, etc.)
+- Clear all Redis data using `FLUSHALL`
+- Confirm the reset was successful
+
+#### Safety Features
+
+**✅ The reset service is completely safe and will NEVER run automatically:**
+
+- **Docker Compose Profiles**: The reset service uses the `tools` profile, which excludes it from normal operations
+- **Manual Only**: Only runs when explicitly requested with `docker compose run --rm reset`
+- **Double Confirmation**: Requires `--confirm` flag to actually perform the reset
+- **Inspection First**: Shows what will be deleted before proceeding
+
+**Normal operations are completely safe:**
+```bash
+# These commands will NOT run the reset service
+docker compose up -d          # Starts: redis, api, worker, scheduler, frontend
+docker compose up             # Same as above  
+docker compose restart        # Restarts services, no reset
+docker compose down           # Stops services, no reset
+```
+
+**Reset only happens when explicitly requested:**
+```bash
+# Only these commands will run the reset service
+docker compose run --rm reset                    # Inspect only (safe)
+docker compose run --rm reset --confirm          # Actually reset (destructive)
+```
+
+**⚠️ Warning**: The reset operation will permanently delete all tasks, queue data, and system state. Only use during development.
+
 ### Testing
 ```bash
 # Run tests (when available)
