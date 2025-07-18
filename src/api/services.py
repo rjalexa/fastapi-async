@@ -51,7 +51,7 @@ class RedisService:
     async def get_all_state_counters(self) -> Dict[str, int]:
         """Get all task state counters."""
         counters = {}
-        for state in ["pending", "active", "completed", "failed", "dlq"]:
+        for state in ["pending", "active", "completed", "failed", "scheduled", "dlq"]:
             counters[state] = await self.get_state_counter(state)
         return counters
 

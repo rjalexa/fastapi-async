@@ -15,6 +15,7 @@ class TaskState(str, Enum):
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    SCHEDULED = "SCHEDULED"
     DLQ = "DLQ"
 
 

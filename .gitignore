@@ -331,3 +331,5 @@ settings.local.*
 
 # Ruff related
 .ruff_cache
+
+frontend/images

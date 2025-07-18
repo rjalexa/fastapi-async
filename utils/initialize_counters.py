@@ -48,7 +48,7 @@ async def initialize_counters():
         print("\nInitializing Redis counters...")
         async with redis_conn.pipeline(transaction=True) as pipe:
             # Clear existing counters first
-            for state in ["pending", "active", "completed", "failed", "dlq"]:
+            for state in ["pending", "active", "completed", "failed", "scheduled", "dlq"]:
                 await pipe.delete(f"metrics:tasks:state:{state}")
             
             # Set new counter values
@@ -62,7 +62,7 @@ async def initialize_counters():
         
         # Verify counters
         print("\nVerifying counters:")
-        for state in ["pending", "active", "completed", "failed", "dlq"]:
+        for state in ["pending", "active", "completed", "failed", "scheduled", "dlq"]:
             count = await redis_conn.get(f"metrics:tasks:state:{state}")
             count = int(count) if count else 0
             print(f"  {state.upper()}: {count}")
