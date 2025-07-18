@@ -60,11 +60,12 @@ class TaskService:
             "error_history": json.dumps([]),
         }
 
-        # Store task metadata
-        await self.redis.hset(f"task:{task_id}", mapping=task_data)
-
-        # Queue in primary queue
-        await self.redis.lpush("tasks:pending:primary", task_id)
+        # Use Redis transaction to ensure atomicity
+        async with self.redis.pipeline(transaction=True) as pipe:
+            # Store task metadata and queue in primary queue atomically
+            await pipe.hset(f"task:{task_id}", mapping=task_data)
+            await pipe.lpush("tasks:pending:primary", task_id)
+            await pipe.execute()
 
         return task_id
 
@@ -132,6 +133,71 @@ class TaskService:
         await self.redis.lpush("tasks:pending:retry", task_id)
 
         return True
+
+    async def requeue_orphaned_tasks(self) -> Dict[str, any]:
+        """Find and re-queue orphaned tasks."""
+        found_count = 0
+        requeued_count = 0
+        errors = []
+
+        try:
+            # Get all task IDs from all queues to check what's already queued
+            queued_task_ids = set()
+            
+            # Check primary queue
+            primary_tasks = await self.redis.lrange("tasks:pending:primary", 0, -1)
+            queued_task_ids.update(primary_tasks)
+            
+            # Check retry queue
+            retry_tasks = await self.redis.lrange("tasks:pending:retry", 0, -1)
+            queued_task_ids.update(retry_tasks)
+            
+            # Check scheduled queue (sorted set)
+            scheduled_tasks = await self.redis.zrange("tasks:scheduled", 0, -1)
+            queued_task_ids.update(scheduled_tasks)
+            
+            # Check DLQ
+            dlq_tasks = await self.redis.lrange("dlq:tasks", 0, -1)
+            queued_task_ids.update(dlq_tasks)
+
+            # Scan all task keys to find orphaned ones
+            async for key in self.redis.scan_iter("task:*"):
+                task_id = key.split(":", 1)[1]  # Extract task_id from "task:uuid"
+                
+                # Get task state
+                task_state = await self.redis.hget(key, "state")
+                
+                if task_state == TaskState.PENDING.value and task_id not in queued_task_ids:
+                    found_count += 1
+                    
+                    try:
+                        # Re-queue the orphaned task in primary queue
+                        await self.redis.lpush("tasks:pending:primary", task_id)
+                        
+                        # Update the task's updated_at timestamp
+                        await self.redis.hset(key, "updated_at", datetime.utcnow().isoformat())
+                        
+                        requeued_count += 1
+                        
+                    except Exception as e:
+                        error_msg = f"Failed to requeue task {task_id}: {str(e)}"
+                        errors.append(error_msg)
+
+            return {
+                "found": found_count,
+                "requeued": requeued_count,
+                "errors": errors,
+                "message": f"Found {found_count} orphaned tasks, successfully requeued {requeued_count}"
+            }
+
+        except Exception as e:
+            errors.append(f"Error during orphaned task scan: {str(e)}")
+            return {
+                "found": found_count,
+                "requeued": requeued_count,
+                "errors": errors,
+                "message": f"Partial completion due to error: {str(e)}"
+            }
 
 
 class QueueService:

@@ -115,3 +115,29 @@ async def retry_task(
     # Workers consume directly from Redis queues
 
     return TaskResponse(task_id=task_id, state="PENDING")
+
+
+@router.post("/requeue-orphaned", response_model=dict)
+async def requeue_orphaned_tasks(
+    task_svc: TaskService = Depends(get_task_service)
+) -> dict:
+    """
+    Find and re-queue orphaned tasks.
+    
+    Orphaned tasks are tasks that have PENDING state in Redis but are not
+    present in any work queue. This can happen if there's a failure between
+    storing task metadata and adding the task to a queue.
+    
+    Returns:
+    - **found**: Number of orphaned tasks found
+    - **requeued**: Number of tasks successfully re-queued
+    - **errors**: List of any errors encountered
+    """
+    try:
+        result = await task_svc.requeue_orphaned_tasks()
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to requeue orphaned tasks: {str(e)}",
+        )
