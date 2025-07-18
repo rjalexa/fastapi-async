@@ -17,9 +17,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(
         default="redis://localhost:6379/0", env="CELERY_BROKER_URL"
     )
-    celery_result_backend: str = Field(
-        default="redis://localhost:6379/0", env="CELERY_RESULT_BACKEND"
-    )
+    # Note: celery_result_backend removed - we use custom task:{task_id} storage instead
 
     # Task Processing Configuration
     default_retry_ratio: float = Field(default=0.3, env="DEFAULT_RETRY_RATIO")

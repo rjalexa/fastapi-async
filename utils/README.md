@@ -137,6 +137,37 @@ python3 utils/reset_redis.py --confirm
 docker compose run --rm reset --confirm
 ```
 
+### `cleanup_celery_meta.py`
+
+Utility for cleaning up Celery result backend keys (`celery-task-meta-*`) from Redis.
+
+Since we've disabled Celery's result backend in favor of our custom `task:{task_id}` storage, this script removes any existing Celery result keys to free up Redis memory.
+
+#### Usage
+
+```bash
+# Dry run - see what would be deleted
+python3 utils/cleanup_celery_meta.py --dry-run
+
+# Actually delete the keys
+python3 utils/cleanup_celery_meta.py
+
+# Use custom Redis URL
+python3 utils/cleanup_celery_meta.py --redis-url redis://localhost:6379/1
+```
+
+#### Options
+
+- `--redis-url URL`: Redis connection URL (default: redis://localhost:6379/0)
+- `--dry-run`: Show what would be deleted without actually deleting
+- `--help`: Show help message
+
+#### When to Use
+
+- After upgrading to the new task storage system
+- When you notice many `celery-task-meta-*` keys in Redis
+- As part of Redis maintenance to free up memory
+
 ## Dependencies
 
 The utilities require:

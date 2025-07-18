@@ -12,11 +12,11 @@ from tasks import process_scheduled_tasks, summarize_task
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))
 logger = logging.getLogger(__name__)
 
-# Create Celery app
+# Create Celery app - disable result backend to avoid celery-task-meta-* keys
 app = Celery(
     "asynctaskflow-worker",
     broker=settings.celery_broker_url,
-    backend=settings.celery_result_backend,
+    backend=None,  # Disable result backend - we use custom task:{task_id} storage
 )
 
 # Configure Celery
@@ -32,8 +32,8 @@ app.conf.update(
     worker_prefetch_multiplier=settings.worker_prefetch_multiplier,
     task_soft_time_limit=settings.task_soft_time_limit,
     task_time_limit=settings.task_time_limit,
-    # Result backend settings
-    result_expires=3600,  # 1 hour
+    # Disable result backend completely
+    task_ignore_result=True,
     # Task routing
     task_routes={
         "summarize_text": {"queue": "default"},
