@@ -1,10 +1,11 @@
 # src/api/routers/tasks.py
 """Task management API endpoints."""
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from typing import Optional
 from celery import Celery
 
-from schemas import TaskCreate, TaskDetail, TaskResponse, TaskRetryRequest
+from schemas import TaskCreate, TaskDetail, TaskResponse, TaskRetryRequest, TaskDeleteResponse, TaskListResponse, TaskState
 from services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
@@ -47,7 +48,7 @@ async def create_task(
         # Note: No need to trigger Celery task anymore
         # Workers consume directly from Redis queues
 
-        return TaskResponse(task_id=task_id, state="PENDING")
+        return TaskResponse(task_id=task_id, state=TaskState.PENDING)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -97,7 +98,7 @@ async def retry_task(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
         )
 
-    if task.state not in ["FAILED", "DLQ"]:
+    if task.state not in [TaskState.FAILED, TaskState.DLQ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Task in state '{task.state}' cannot be retried",
@@ -114,7 +115,7 @@ async def retry_task(
     # Note: No need to trigger Celery task anymore
     # Workers consume directly from Redis queues
 
-    return TaskResponse(task_id=task_id, state="PENDING")
+    return TaskResponse(task_id=task_id, state=TaskState.PENDING)
 
 
 @router.post("/requeue-orphaned", response_model=dict)
@@ -140,4 +141,87 @@ async def requeue_orphaned_tasks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to requeue orphaned tasks: {str(e)}",
+        )
+
+
+@router.get("/", response_model=TaskListResponse)
+async def list_tasks_by_status(
+    task_status: Optional[TaskState] = Query(None, alias="status", description="Filter tasks by status"),
+    limit: Optional[int] = Query(100, description="Maximum number of task IDs to return", ge=1, le=1000),
+    task_svc: TaskService = Depends(get_task_service)
+) -> TaskListResponse:
+    """
+    List task IDs filtered by status.
+
+    - **status**: Task status to filter by (optional, shows dropdown in Swagger UI)
+    - **limit**: Maximum number of task IDs to return (default: 100, max: 1000)
+
+    Returns a list of task IDs matching the specified criteria.
+    """
+    try:
+        if task_status is None:
+            # If no status specified, we could return all tasks, but that might be too many
+            # For now, let's require a status filter
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Status parameter is required. Please specify a task status to filter by.",
+            )
+        
+        task_ids = await task_svc.get_task_ids_by_status(task_status, limit)
+        
+        return TaskListResponse(
+            task_ids=task_ids,
+            count=len(task_ids),
+            status=task_status
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list tasks: {str(e)}",
+        )
+
+
+@router.delete("/{task_id}", response_model=TaskDeleteResponse)
+async def delete_task(
+    task_id: str,
+    task_svc: TaskService = Depends(get_task_service)
+) -> TaskDeleteResponse:
+    """
+    Delete a task and all its associated data.
+
+    - **task_id**: Unique task identifier
+
+    This will permanently remove the task from all queues and delete all associated data.
+    This action cannot be undone.
+    """
+    try:
+        # Check if task exists first
+        task = await task_svc.get_task(task_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail="Task not found"
+            )
+        
+        # Delete the task
+        success = await task_svc.delete_task(task_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete task"
+            )
+        
+        return TaskDeleteResponse(
+            task_id=task_id,
+            message=f"Task {task_id} and all associated data have been permanently deleted"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete task: {str(e)}",
         )

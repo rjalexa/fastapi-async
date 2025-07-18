@@ -100,3 +100,18 @@ class TaskRetryRequest(BaseModel):
     reset_retry_count: bool = Field(
         default=False, description="Whether to reset the retry count"
     )
+
+
+class TaskDeleteResponse(BaseModel):
+    """Schema for task deletion response."""
+
+    task_id: str = Field(..., description="Deleted task identifier")
+    message: str = Field(..., description="Deletion confirmation message")
+
+
+class TaskListResponse(BaseModel):
+    """Schema for task list response."""
+
+    task_ids: List[str] = Field(..., description="List of task IDs matching the criteria")
+    count: int = Field(..., description="Number of tasks found")
+    status: Optional[TaskState] = Field(None, description="Filter status used")

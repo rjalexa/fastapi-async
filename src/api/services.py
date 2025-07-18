@@ -199,6 +199,55 @@ class TaskService:
                 "message": f"Partial completion due to error: {str(e)}"
             }
 
+    async def delete_task(self, task_id: str) -> bool:
+        """Delete a task and all its associated data from the system."""
+        try:
+            # Use Redis transaction to ensure atomicity
+            async with self.redis.pipeline(transaction=True) as pipe:
+                # Delete the main task hash
+                await pipe.delete(f"task:{task_id}")
+                
+                # Delete any corresponding dead-letter queue hash
+                await pipe.delete(f"dlq:task:{task_id}")
+                
+                # Remove the task_id from all potential list-based queues
+                await pipe.lrem(QUEUE_KEY_MAP[QueueName.PRIMARY], 0, task_id)
+                await pipe.lrem(QUEUE_KEY_MAP[QueueName.RETRY], 0, task_id)
+                await pipe.lrem(QUEUE_KEY_MAP[QueueName.DLQ], 0, task_id)
+                
+                # Remove the task_id from the scheduled sorted set
+                await pipe.zrem(QUEUE_KEY_MAP[QueueName.SCHEDULED], task_id)
+                
+                await pipe.execute()
+            
+            return True
+        except Exception:
+            return False
+
+    async def get_task_ids_by_status(self, status: TaskState, limit: Optional[int] = None) -> List[str]:
+        """Get a list of task IDs filtered by their status."""
+        task_ids = []
+        count = 0
+        
+        try:
+            async for key in self.redis.scan_iter("task:*"):
+                # Check if we've reached the limit
+                if limit is not None and count >= limit:
+                    break
+                
+                # Get task state
+                task_state = await self.redis.hget(key, "state")
+                
+                if task_state == status.value:
+                    # Extract task_id from "task:uuid" format
+                    task_id = key.split(":", 1)[1]
+                    task_ids.append(task_id)
+                    count += 1
+            
+            return task_ids
+        except Exception:
+            return []
+
 
 class QueueService:
     """Service for managing queues and monitoring."""
