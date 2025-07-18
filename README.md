@@ -451,6 +451,36 @@ docker compose run --rm reset --confirm          # Actually reset (destructive)
 
 **⚠️ Warning**: The reset operation will permanently delete all tasks, queue data, and system state. Only use during development.
 
+### Viewing Redis Data
+
+You can inspect your Redis data using a Redis viewer (like the Redis for VS Code extension). When the system is active, you should see these key structures:
+
+**Queue Keys (Lists/Sets):**
+- `tasks:pending:primary` - New tasks waiting to be processed
+- `tasks:pending:retry` - Failed tasks waiting for retry
+- `tasks:scheduled` - Tasks scheduled for delayed retry (sorted set)
+- `dlq:tasks` - Dead letter queue for permanently failed tasks
+
+**Task Metadata (Hashes):**
+- `task:{uuid}` - Individual task data and state
+- `dlq:task:{uuid}` - Dead letter queue task metadata
+
+**Worker Data:**
+- `worker:heartbeat:{worker-id}` - Worker health heartbeats
+- `_kombu.binding.*` - Celery internal queues
+
+**Note**: Redis automatically removes empty lists and sets to save memory. If you don't see the queue keys, it means they're currently empty. Create some tasks to see them appear:
+
+```bash
+# Create a test task to populate queues
+curl -X POST http://localhost:8000/api/v1/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{"content": "This is a test document to summarize."}'
+
+# Check queue status via API
+curl http://localhost:8000/api/v1/queues/status
+```
+
 ### Testing
 ```bash
 # Run tests (when available)
