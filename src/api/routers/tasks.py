@@ -1,11 +1,11 @@
 # src/api/routers/tasks.py
 """Task management API endpoints."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from celery import Celery
 
 from schemas import TaskCreate, TaskDetail, TaskResponse, TaskRetryRequest
-from services import task_service
+from services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -13,8 +13,27 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 celery_app: Celery = None
 
 
+def get_task_service() -> TaskService:
+    """Dependency to get task service from app state."""
+    from fastapi import Request
+    from services import task_service
+    
+    # Try to get from global first
+    if task_service is not None:
+        return task_service
+    
+    # If global is None, raise service unavailable
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Task service not available",
+    )
+
+
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_task(task_data: TaskCreate) -> TaskResponse:
+async def create_task(
+    task_data: TaskCreate, 
+    task_svc: TaskService = Depends(get_task_service)
+) -> TaskResponse:
     """
     Create a new summarization task.
 
@@ -22,14 +41,8 @@ async def create_task(task_data: TaskCreate) -> TaskResponse:
 
     Returns the task ID and initial state.
     """
-    if not task_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Task service not available",
-        )
-
     try:
-        task_id = await task_service.create_task(task_data.content)
+        task_id = await task_svc.create_task(task_data.content)
 
         # Trigger Celery task
         if celery_app:
@@ -44,7 +57,10 @@ async def create_task(task_data: TaskCreate) -> TaskResponse:
 
 
 @router.get("/{task_id}", response_model=TaskDetail)
-async def get_task(task_id: str) -> TaskDetail:
+async def get_task(
+    task_id: str, 
+    task_svc: TaskService = Depends(get_task_service)
+) -> TaskDetail:
     """
     Get task status and details by ID.
 
@@ -52,13 +68,7 @@ async def get_task(task_id: str) -> TaskDetail:
 
     Returns complete task information including state, result, and error history.
     """
-    if not task_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Task service not available",
-        )
-
-    task = await task_service.get_task(task_id)
+    task = await task_svc.get_task(task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -69,7 +79,9 @@ async def get_task(task_id: str) -> TaskDetail:
 
 @router.post("/{task_id}/retry", response_model=TaskResponse)
 async def retry_task(
-    task_id: str, retry_request: TaskRetryRequest = None
+    task_id: str, 
+    retry_request: TaskRetryRequest = None,
+    task_svc: TaskService = Depends(get_task_service)
 ) -> TaskResponse:
     """
     Manually retry a failed task.
@@ -79,14 +91,8 @@ async def retry_task(
 
     Only failed or DLQ tasks can be retried.
     """
-    if not task_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Task service not available",
-        )
-
     # Get current task to check state
-    task = await task_service.get_task(task_id)
+    task = await task_svc.get_task(task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
@@ -99,7 +105,7 @@ async def retry_task(
         )
 
     reset_retry_count = retry_request.reset_retry_count if retry_request else False
-    success = await task_service.retry_task(task_id, reset_retry_count)
+    success = await task_svc.retry_task(task_id, reset_retry_count)
 
     if not success:
         raise HTTPException(

@@ -99,6 +99,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Set Celery app in task router
+tasks.celery_app = celery_app
+
 # Include routers
 app.include_router(health.router)
 app.include_router(tasks.router)
