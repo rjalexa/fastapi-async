@@ -159,7 +159,7 @@ services:
     volumes:
       - ./utils:/app/utils
     working_dir: /app
-    command: uv run python utils/reset_redis.py
+    entrypoint: ["uv", "run", "python", "utils/reset_redis.py"]
     profiles:
       - tools
 
