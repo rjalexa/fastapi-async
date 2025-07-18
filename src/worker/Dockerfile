@@ -20,6 +20,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
@@ -54,10 +55,6 @@ RUN mkdir -p /app/logs /app/tmp && \
 COPY src/worker/start_worker.sh /app/
 RUN chmod +x /app/start_worker.sh && \
     chown celery:celery /app/start_worker.sh
-
-# Add a healthcheck for the worker containers
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD python -c "import redis; r=redis.from_url('${REDIS_URL:-redis://redis:6379/0}'); r.ping()" || exit 1
 
 # Switch to non-root user
 USER celery

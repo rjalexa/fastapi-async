@@ -14,12 +14,6 @@ x-worker-common: &worker-common
     - ./src/worker:/app
   user: "1000:1000"
   restart: unless-stopped
-  healthcheck:
-    test: ["CMD", "python", "-c", "import redis; r=redis.from_url('${REDIS_URL:-redis://redis:6379/0}'); r.ping()"]
-    interval: ${WORKER_HEALTH_CHECK_INTERVAL:-30s}
-    timeout: ${WORKER_HEALTH_CHECK_TIMEOUT:-10s}
-    retries: ${WORKER_HEALTH_CHECK_RETRIES:-3}
-    start_period: ${WORKER_HEALTH_CHECK_START_PERIOD:-60s}
   deploy:
     resources:
       limits:
@@ -116,6 +110,12 @@ services:
         reservations:
           memory: ${WORKER_MEMORY_RESERVATION:-256M}
           cpus: "${WORKER_CPU_RESERVATION:-0.5}"
+    healthcheck:
+      test: ["CMD", "uv", "run", "celery", "-A", "tasks", "inspect", "ping"]
+      interval: ${WORKER_HEALTH_CHECK_INTERVAL:-30s}
+      timeout: ${WORKER_HEALTH_CHECK_TIMEOUT:-10s}
+      retries: ${WORKER_HEALTH_CHECK_RETRIES:-3}
+      start_period: ${WORKER_HEALTH_CHECK_START_PERIOD:-60s}
     labels:
       - "com.asynctaskflow.service=worker"
     command: /app/start_worker.sh
@@ -125,6 +125,12 @@ services:
     environment: 
       <<: *worker-environment
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "pgrep -f 'celery.*beat' > /dev/null"]
+      interval: ${WORKER_HEALTH_CHECK_INTERVAL:-30s}
+      timeout: ${WORKER_HEALTH_CHECK_TIMEOUT:-10s}
+      retries: ${WORKER_HEALTH_CHECK_RETRIES:-3}
+      start_period: ${WORKER_HEALTH_CHECK_START_PERIOD:-60s}
     command: uv run celery -A tasks beat --loglevel=${LOG_LEVEL:-info}
     labels:
       - "com.asynctaskflow.service=scheduler"
@@ -138,6 +144,12 @@ services:
       FLOWER_PORT: 5555
       FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-admin:password}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-u", "${FLOWER_BASIC_AUTH:-admin:password}", "http://localhost:5555/api/workers"]
+      interval: ${WORKER_HEALTH_CHECK_INTERVAL:-30s}
+      timeout: ${WORKER_HEALTH_CHECK_TIMEOUT:-10s}
+      retries: ${WORKER_HEALTH_CHECK_RETRIES:-3}
+      start_period: ${WORKER_HEALTH_CHECK_START_PERIOD:-60s}
     command: >
       uv run celery -A tasks flower 
       --host=0.0.0.0 
