@@ -62,44 +62,6 @@ async def health_check(request: Request) -> HealthStatus:
         )
 
 
-@router.get("/ready")
-async def readiness_check(request: Request) -> dict:
-    """
-    Kubernetes-style readiness check.
-
-    Returns 200 if the service is ready to accept traffic.
-    Returns 503 if not ready (dependencies down, service not initialized).
-
-    Used by load balancers to determine if traffic should be routed here.
-    """
-    current_health_service = get_health_service(request)
-
-    if not current_health_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not ready", "reason": "Health service not initialized"},
-        )
-
-    try:
-        health_data = await current_health_service.check_health()
-        if health_data["status"] == "healthy":
-            return {"status": "ready"}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail={
-                    "status": "not ready",
-                    "reason": "Dependencies unhealthy",
-                    "components": health_data["components"],
-                },
-            )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not ready", "reason": f"Health check failed: {str(e)}"},
-        )
-
-
 @router.get("/health/workers")
 async def worker_health_check(request: Request) -> dict:
     """
@@ -263,3 +225,41 @@ async def liveness_check() -> dict:
     Used by Kubernetes to determine if the pod should be restarted.
     """
     return {"status": "alive", "timestamp": datetime.utcnow().isoformat()}
+
+
+@router.get("/ready")
+async def readiness_check(request: Request) -> dict:
+    """
+    Kubernetes-style readiness check.
+
+    Returns 200 if the service is ready to accept traffic.
+    Returns 503 if not ready (dependencies down, service not initialized).
+
+    Used by load balancers to determine if traffic should be routed here.
+    """
+    current_health_service = get_health_service(request)
+
+    if not current_health_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not ready", "reason": "Health service not initialized"},
+        )
+
+    try:
+        health_data = await current_health_service.check_health()
+        if health_data["status"] == "healthy":
+            return {"status": "ready"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "status": "not ready",
+                    "reason": "Dependencies unhealthy",
+                    "components": health_data["components"],
+                },
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not ready", "reason": f"Health check failed: {str(e)}"},
+        )

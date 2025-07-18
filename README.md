@@ -257,7 +257,7 @@ The system implements a sophisticated queue architecture that provides fine-grai
 
 **1. Task Creation (API Layer)**
 ```http
-POST /api/v1/tasks/
+POST /api/v1/tasks/summarize/
 Content-Type: application/json
 {"content": "Text to summarize"}
 ```
@@ -366,10 +366,15 @@ This design separates "work to be done" (queues) from "historical record keeping
 
 ## API Endpoints
 
-### Task Management
-- `POST /api/v1/tasks/` - Create a new summarization task
-- `GET /api/v1/tasks/{task_id}` - Get task details and results
-- `POST /api/v1/tasks/{task_id}/retry` - Manually retry a failed task
+### Task Creation (Application-Specific)
+- `POST /api/v1/tasks/summarize/` - Create a new text summarization task
+
+### Task Management (Generic)
+- `GET /api/v1/tasks/{task_id}` - Get task details and results (works for any task type)
+- `POST /api/v1/tasks/{task_id}/retry` - Manually retry a failed task (works for any task type)
+- `GET /api/v1/tasks/` - List tasks by status (works for any task type)
+- `POST /api/v1/tasks/requeue-orphaned` - Requeue orphaned tasks (works for any task type)
+- `DELETE /api/v1/tasks/{task_id}` - Delete a task (works for any task type)
 
 ### Monitoring
 - `GET /health` - System health check
@@ -473,7 +478,7 @@ You can inspect your Redis data using a Redis viewer (like the Redis for VS Code
 
 ```bash
 # Create a test task to populate queues
-curl -X POST http://localhost:8000/api/v1/tasks/ \
+curl -X POST http://localhost:8000/api/v1/tasks/summarize/ \
   -H "Content-Type: application/json" \
   -d '{"content": "This is a test document to summarize."}'
 
@@ -487,7 +492,7 @@ curl http://localhost:8000/api/v1/queues/status
 docker compose exec api python -m pytest
 
 # Manual API testing
-curl -X POST http://localhost:8000/api/v1/tasks/ \
+curl -X POST http://localhost:8000/api/v1/tasks/summarize/ \
   -H "Content-Type: application/json" \
   -d '{"content": "This is a test document to summarize."}'
 ```

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from config import settings
-from routers import health, tasks, queues
+from routers import health, tasks, queues, summarize
 from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
@@ -94,10 +94,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Set Celery app in task router
+# Set Celery app in task routers
 tasks.celery_app = celery_app
+summarize.celery_app = celery_app
 
 # Include routers
+app.include_router(summarize.router)  # Application endpoints first
 app.include_router(health.router)
 app.include_router(tasks.router)
 app.include_router(queues.router)
