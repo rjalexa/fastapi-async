@@ -46,7 +46,11 @@ def main():
         redis_conn = redis.from_url(settings.redis_url, decode_responses=True)
         
         # Generate unique worker ID for heartbeat
-        worker_id = f"worker-{os.getpid()}-{int(time.time())}"
+        import socket
+        import uuid
+        hostname = socket.gethostname()
+        unique_suffix = str(uuid.uuid4())[:8]  # Short UUID for uniqueness
+        worker_id = f"worker-{hostname}-{os.getpid()}-{unique_suffix}"
         heartbeat_key = f"worker:heartbeat:{worker_id}"
         
         processed_count = 0
