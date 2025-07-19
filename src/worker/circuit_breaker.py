@@ -37,6 +37,38 @@ async def call_openrouter_api(content: str) -> str:
         return result["choices"][0]["message"]["content"]
 
 
+def get_container_id() -> str:
+    """Get Docker container ID from /proc/self/cgroup or hostname."""
+    try:
+        # Try to get container ID from cgroup (most reliable method)
+        with open('/proc/self/cgroup', 'r') as f:
+            for line in f:
+                if 'docker' in line:
+                    # Extract container ID from cgroup path
+                    parts = line.strip().split('/')
+                    for part in reversed(parts):
+                        if len(part) == 64 and part.isalnum():  # Docker container ID format
+                            return part[:12]  # Return short container ID
+                        elif part.startswith('docker-') and part.endswith('.scope'):
+                            # systemd format: docker-<container_id>.scope
+                            container_id = part[7:-6]  # Remove 'docker-' prefix and '.scope' suffix
+                            return container_id[:12]
+        
+        # Fallback: use hostname (often set to container ID in Docker)
+        hostname = os.uname().nodename
+        if len(hostname) >= 12:
+            return hostname[:12]
+        
+        return hostname
+        
+    except Exception:
+        # Final fallback: use hostname or unknown
+        try:
+            return os.uname().nodename[:12]
+        except Exception:
+            return "unknown"
+
+
 def get_circuit_breaker_status() -> dict:
     """Get current circuit breaker status for this worker."""
     try:
@@ -45,7 +77,7 @@ def get_circuit_breaker_status() -> dict:
             "state": openrouter_breaker.current_state,
             "fail_count": getattr(openrouter_breaker, "fail_counter", 0),
             "success_count": getattr(openrouter_breaker, "success_counter", 0),
-            "worker_pid": os.getpid(),
+            "container_id": get_container_id(),
         }
 
         # Add optional attributes if they exist
@@ -58,9 +90,21 @@ def get_circuit_breaker_status() -> dict:
         return status
 
     except Exception as e:
-        return {"state": "error", "error": str(e), "worker_pid": os.getpid()}
+        return {"state": "error", "error": str(e), "container_id": get_container_id()}
 
 
 def reset_circuit_breaker():
     """Manually reset the circuit breaker."""
-    openrouter_breaker.reset()
+    try:
+        # Try different reset methods based on pybreaker version
+        if hasattr(openrouter_breaker, 'reset'):
+            openrouter_breaker.reset()
+        elif hasattr(openrouter_breaker, '_reset'):
+            openrouter_breaker._reset()
+        else:
+            # Manual reset by setting state
+            openrouter_breaker._state = openrouter_breaker._closed_state
+            openrouter_breaker.fail_counter = 0
+        return True
+    except Exception as e:
+        raise Exception(f"Failed to reset circuit breaker: {str(e)}")

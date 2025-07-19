@@ -43,6 +43,7 @@ const Dashboard: React.FC = () => {
                 break;
                 
               case 'heartbeat':
+                setLastUpdate(new Date());
                 setIsConnected(true);
                 break;
                 

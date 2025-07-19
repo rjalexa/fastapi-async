@@ -13,9 +13,24 @@ from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
 
-# Note: No Celery app needed in API anymore
-# Workers consume directly from Redis queues
-celery_app = None
+# Create Celery app for worker communication (broadcast commands)
+from celery import Celery
+
+celery_app = Celery(
+    "asynctaskflow-api",
+    broker=settings.celery_broker_url,
+    backend=None,  # No result backend needed for API
+)
+
+# Configure Celery for API (minimal config for worker communication)
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    task_ignore_result=True,
+)
 
 
 async def initialize_services() -> tuple:

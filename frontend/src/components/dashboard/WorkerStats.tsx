@@ -1,5 +1,5 @@
 // frontend/src/components/dashboard/WorkerStats.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { WorkerStatus, apiService } from '../../lib/api';
 
 interface WorkerStatsProps {
@@ -11,19 +11,24 @@ const WorkerStats: React.FC<WorkerStatsProps> = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchWorkerStatus = async () => {
+  const fetchWorkerStatus = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const status = await apiService.getWorkerStatus();
       setWorkerStatus(status);
+      // Only set loading to false if it was true (initial load)
+      if (loading) {
+        setLoading(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch worker status');
       console.error('Failed to fetch worker status:', err);
-    } finally {
-      setLoading(false);
+      // Only set loading to false if it was true (initial load)
+      if (loading) {
+        setLoading(false);
+      }
     }
-  };
+  }, [loading]);
 
   useEffect(() => {
     fetchWorkerStatus();
@@ -32,7 +37,7 @@ const WorkerStats: React.FC<WorkerStatsProps> = () => {
     const interval = setInterval(fetchWorkerStatus, 30000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchWorkerStatus]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -159,33 +164,18 @@ const WorkerStats: React.FC<WorkerStatsProps> = () => {
         </div>
       </div>
 
-      {/* Circuit Breaker Summary */}
-      <div className="mb-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-2">Circuit Breaker States</h4>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(workerStatus.circuit_breaker_states).map(([state, count]) => (
-            <span
-              key={state}
-              className={`px-2 py-1 rounded-full text-xs font-medium ${getCircuitBreakerColor(state)}`}
-            >
-              {state}: {count}
-            </span>
-          ))}
-        </div>
-      </div>
-
       {/* Worker Details */}
       <div>
         <h4 className="text-sm font-semibold text-gray-700 mb-3">Worker Details</h4>
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {workerStatus.worker_details.map((worker) => (
+          {workerStatus.worker_details.map((worker, index) => (
             <div
-              key={worker.worker_id}
+              key={worker.worker_name || `${worker.worker_id}-${index}`}
               className={`rounded-lg p-3 border ${getStatusColor(worker.status)}`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-sm truncate" title={worker.worker_id}>
-                  {worker.worker_id.split('-').slice(-2).join('-')}
+                <span className="font-medium text-sm truncate" title={worker.worker_name || worker.worker_id}>
+                  {worker.worker_name ? worker.worker_name.split('@')[0] : worker.worker_id}
                 </span>
                 <div className="flex items-center space-x-2">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCircuitBreakerColor(worker.circuit_breaker.state)}`}>
@@ -198,13 +188,19 @@ const WorkerStats: React.FC<WorkerStatsProps> = () => {
               </div>
               
               <div className="text-xs text-gray-600 space-y-1">
+                {worker.timestamp && (
+                  <div className="flex justify-between">
+                    <span>Last seen:</span>
+                    <span>{formatTimestamp(worker.timestamp)}</span>
+                  </div>
+                )}
                 {worker.last_heartbeat && (
                   <div className="flex justify-between">
                     <span>Last heartbeat:</span>
                     <span>{formatTimestamp(worker.last_heartbeat)}</span>
                   </div>
                 )}
-                {worker.heartbeat_age_seconds !== null && (
+                {worker.heartbeat_age_seconds !== null && !isNaN(worker.heartbeat_age_seconds) && (
                   <div className="flex justify-between">
                     <span>Age:</span>
                     <span>{formatAge(worker.heartbeat_age_seconds)}</span>
@@ -220,18 +216,24 @@ const WorkerStats: React.FC<WorkerStatsProps> = () => {
                     {worker.circuit_breaker.note}
                   </div>
                 )}
+                {worker.circuit_breaker.fail_count !== undefined && (
+                  <div className="flex justify-between" title="Number of consecutive API call failures">
+                    <span>API Failures:</span>
+                    <span>{worker.circuit_breaker.fail_count}</span>
+                  </div>
+                )}
+                {worker.circuit_breaker.success_count !== undefined && (
+                  <div className="flex justify-between" title="Number of successful API calls since last failure">
+                    <span>API Successes:</span>
+                    <span>{worker.circuit_breaker.success_count}</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Last Updated */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <p className="text-xs text-gray-500">
-          Last updated: {new Date(workerStatus.timestamp).toLocaleTimeString()}
-        </p>
-      </div>
     </div>
   );
 };

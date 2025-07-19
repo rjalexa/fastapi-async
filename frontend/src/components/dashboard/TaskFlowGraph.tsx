@@ -20,12 +20,12 @@ interface TaskFlowGraphProps {
 }
 
 const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
-  // Define the initial nodes based on the task flow - matching the exact layout from the image
+  // Define the initial nodes based on the task flow - shifted left to prevent truncation
   const initialNodes: Node[] = useMemo(() => [
     {
       id: 'submit',
       type: 'input',
-      position: { x: 335, y: 50 },
+      position: { x: 250, y: 50 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -33,19 +33,11 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: '#e3f2fd',
-        border: '2px solid #1976d2',
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: 'bg-blue-100 border-2 border-blue-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'primary-queue',
-      position: { x: 335, y: 150 },
+      position: { x: 250, y: 150 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -54,19 +46,13 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.queues.primary ? '#fff3e0' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.queues.primary ? '#f57c00' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.queues.primary 
+        ? 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'processing',
-      position: { x: 435, y: 250 },
+      position: { x: 350, y: 250 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -75,20 +61,14 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.states.ACTIVE ? '#e8f5e8' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.ACTIVE ? '#4caf50' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.states.ACTIVE 
+        ? 'bg-blue-100 border-2 border-blue-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'completed',
       type: 'output',
-      position: { x: 240, y: 350 },
+      position: { x: 155, y: 350 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -97,19 +77,13 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.states.COMPLETED ? '#e8f5e8' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.COMPLETED ? '#2e7d32' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.states.COMPLETED 
+        ? 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'failed',
-      position: { x: 630, y: 350 },
+      position: { x: 545, y: 350 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -118,19 +92,13 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.states.FAILED ? '#ffebee' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.states.FAILED ? '#d32f2f' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.states.FAILED 
+        ? 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'scheduled-queue',
-      position: { x: 550, y: 470 },
+      position: { x: 465, y: 470 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -139,20 +107,14 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.queues.scheduled ? '#f3e5f5' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.queues.scheduled ? '#7b1fa2' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.queues.scheduled 
+        ? 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'dlq',
       type: 'output',
-      position: { x: 720, y: 470 },
+      position: { x: 625, y: 470 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -161,19 +123,13 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.queues.dlq ? '#ffebee' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.queues.dlq ? '#c62828' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.queues.dlq 
+        ? 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'retry-queue',
-      position: { x: 435, y: 570 },
+      position: { x: 350, y: 570 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -182,15 +138,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      style: {
-        background: queueStatus?.queues.retry ? '#fff8e1' : '#f5f5f5',
-        border: `2px solid ${queueStatus?.queues.retry ? '#ffa000' : '#bdbdbd'}`,
-        borderRadius: '8px',
-        padding: '10px',
-        minWidth: '120px',
-        textAlign: 'center',
-        color: '#1a1a1a'
-      }
+      className: queueStatus?.queues.retry 
+        ? 'bg-orange-100 border-2 border-orange-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     }
   ], [queueStatus]);
 
