@@ -102,9 +102,37 @@ def reset_circuit_breaker():
         elif hasattr(openrouter_breaker, '_reset'):
             openrouter_breaker._reset()
         else:
-            # Manual reset by setting state
-            openrouter_breaker._state = openrouter_breaker._closed_state
-            openrouter_breaker.fail_counter = 0
+            # Manual reset by setting state and counters
+            if hasattr(openrouter_breaker, '_failure_count'):
+                openrouter_breaker._failure_count = 0
+            if hasattr(openrouter_breaker, '_state_storage'):
+                openrouter_breaker._state_storage.state = 'closed'
+            elif hasattr(openrouter_breaker, '_state'):
+                openrouter_breaker._state = 'closed'
         return True
     except Exception as e:
         raise Exception(f"Failed to reset circuit breaker: {str(e)}")
+
+
+def open_circuit_breaker():
+    """Manually open the circuit breaker."""
+    try:
+        # Force the circuit breaker to open by simulating failures
+        # Set the failure counter to exceed the threshold
+        if hasattr(openrouter_breaker, '_failure_count'):
+            openrouter_breaker._failure_count = openrouter_breaker.fail_max + 1
+        
+        # Try to trigger the state change by calling the failure method
+        try:
+            # This will force the circuit breaker to open
+            openrouter_breaker._on_failure()
+        except:
+            # If that doesn't work, try setting the state directly
+            if hasattr(openrouter_breaker, '_state_storage'):
+                openrouter_breaker._state_storage.state = 'open'
+            elif hasattr(openrouter_breaker, '_state'):
+                openrouter_breaker._state = 'open'
+        
+        return True
+    except Exception as e:
+        raise Exception(f"Failed to open circuit breaker: {str(e)}")

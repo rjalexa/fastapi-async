@@ -436,7 +436,7 @@ class HealthService:
                 "redis": redis_ok,
                 "workers": workers_ok,
             },
-            "note": "Use /health/workers for detailed circuit breaker status",
+            "note": "Use /api/v1/workers/ for detailed circuit breaker status",
             "timestamp": datetime.utcnow(),
         }
 
