@@ -211,6 +211,76 @@ python3 utils/initialize_counters.py
 - After data migrations or system upgrades
 - When counters become out of sync with actual task states
 
+### `fix_counter_sync.py`
+
+**NEW**: Utility to detect and fix Redis counter synchronization issues.
+
+This script analyzes the current state of all tasks in Redis and compares it with the state counters, then fixes any discrepancies. This is essential for maintaining accurate queue statistics and resolving "phantom" active tasks.
+
+#### Usage
+
+```bash
+# Analyze and fix counter synchronization issues
+python3 utils/fix_counter_sync.py
+
+# Use custom Redis URL
+python3 utils/fix_counter_sync.py redis://localhost:6379/1
+```
+
+#### Features
+
+- **Comprehensive Analysis**: Scans all `task:*` keys and counts actual states
+- **Counter Comparison**: Compares actual counts with Redis state counters
+- **Automatic Fixing**: Updates counters to match actual task states
+- **Detailed Reporting**: Shows before/after values and changes made
+- **Safe Operation**: Uses atomic Redis transactions for consistency
+
+#### Example Output
+
+```
+🔍 Analyzing Redis task state counters...
+
+📊 Analysis Results:
+   Total tasks found: 28
+
+📈 Counter Values:
+   State        Old    New    Change
+   ------------ ------ ------ --------
+   PENDING      0      0      0
+   ACTIVE       1      0      -1
+   COMPLETED    28     28     0
+   FAILED       0      0      0
+   SCHEDULED    0      0      0
+   DLQ          0      0      0
+
+✅ Fixed 1 counter discrepancies:
+   - ACTIVE: -1
+```
+
+#### When to Use
+
+- **Phantom Active Tasks**: When dashboard shows active tasks but none exist
+- **Counter Drift**: When state counters don't match actual task counts
+- **After System Issues**: Following worker crashes or Redis connection problems
+- **Regular Maintenance**: Periodic verification of counter accuracy
+- **Troubleshooting**: When queue statistics seem incorrect
+
+#### Common Issues This Fixes
+
+1. **Stuck Active Counter**: Tasks marked as ACTIVE but actually completed
+2. **Missing State Transitions**: Counters not updated during state changes
+3. **Worker Crash Recovery**: Counters left inconsistent after worker failures
+4. **Manual Task Manipulation**: Counters out of sync after direct Redis operations
+
+#### Integration with Monitoring
+
+This utility can be integrated into monitoring systems:
+
+```bash
+# Check for counter issues and alert if found
+python3 utils/fix_counter_sync.py | grep "Fixed.*discrepancies" && echo "Counter sync issues detected and fixed"
+```
+
 ### `inject_test_tasks.py`
 
 **NEW**: Task injection utility specifically designed for testing frontend reactions to multiple task creation and processing.
