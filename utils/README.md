@@ -211,6 +211,95 @@ python3 utils/initialize_counters.py
 - After data migrations or system upgrades
 - When counters become out of sync with actual task states
 
+### `inject_test_tasks.py`
+
+**NEW**: Task injection utility specifically designed for testing frontend reactions to multiple task creation and processing.
+
+This script creates exactly 10 tasks (or any specified number) with realistic content and monitors their progress, making it perfect for testing how the frontend dashboard reacts to task creation, queue changes, and real-time updates.
+
+#### Usage
+
+```bash
+# Basic usage - inject 10 tasks with 0.5s delay between each
+python3 utils/inject_test_tasks.py
+
+# Inject 20 tasks with 1 second delay
+python3 utils/inject_test_tasks.py --count 20 --delay 1.0
+
+# Inject tasks and monitor progress for 30 seconds
+python3 utils/inject_test_tasks.py --monitor 30
+
+# Show queue status before and after injection
+python3 utils/inject_test_tasks.py --show-queue-status
+
+# Clean up created tasks automatically
+python3 utils/inject_test_tasks.py --cleanup
+
+# Combine options for comprehensive testing
+python3 utils/inject_test_tasks.py --count 15 --delay 0.3 --monitor 45 --show-queue-status --cleanup
+```
+
+#### Command Line Options
+
+- `--count N`: Number of tasks to create (default: 10)
+- `--delay N`: Delay between task creation in seconds (default: 0.5)
+- `--url URL`: Base URL for the API (default: http://localhost:8000)
+- `--monitor N`: Monitor task progress for N seconds after creation
+- `--cleanup`: Clean up created tasks after completion
+- `--show-queue-status`: Show queue status before and after injection
+
+#### Features
+
+- **Realistic Test Data**: Uses 10 different realistic content samples that rotate
+- **Progress Tracking**: Shows task creation progress with success/failure indicators
+- **Queue Monitoring**: Optional queue status display before/after injection
+- **Task Progress Monitoring**: Optional monitoring of task state changes over time
+- **Automatic Cleanup**: Optional cleanup of created tasks
+- **Frontend Testing Focus**: Designed specifically to test frontend reactions
+- **Flexible Timing**: Configurable delays between task creation
+- **Error Handling**: Comprehensive error reporting and recovery
+
+#### Perfect for Testing
+
+- **Dashboard Responsiveness**: See how the dashboard reacts to multiple tasks
+- **Real-time Updates**: Test SSE/WebSocket functionality with actual task flow
+- **Queue Visualization**: Verify queue depth changes are reflected in UI
+- **Task State Transitions**: Monitor how frontend shows PENDING → ACTIVE → COMPLETED
+- **Performance**: Test frontend performance with multiple simultaneous tasks
+
+#### Example Output
+
+```
+AsyncTaskFlow Task Injection Utility
+Target: http://localhost:8000
+Tasks to create: 10
+Delay between tasks: 0.5s
+
+Injecting 10 test tasks...
+Delay between tasks: 0.5s
+Batch size: 1
+Target API: http://localhost:8000
+Creating task 1/10...
+  ✅ Task 1 created: 550e8400-e29b-41d4-a716-446655440000
+Creating task 2/10...
+  ✅ Task 2 created: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+...
+
+TASK INJECTION SUMMARY
+Total tasks attempted: 10
+Successfully created: 10
+Failed: 0
+Success rate: 100.0%
+
+Created Task IDs:
+  Task 1: 550e8400-e29b-41d4-a716-446655440000
+  Task 2: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+  ...
+
+🎉 All 10 tasks created successfully!
+💡 Use --cleanup flag to automatically delete created tasks
+```
+
 ### `test_realtime_updates.py`
 
 Test utility for the real-time Server-Sent Events (SSE) queue monitoring system.

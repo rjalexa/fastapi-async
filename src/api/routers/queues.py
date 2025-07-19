@@ -163,9 +163,27 @@ async def stream_queue_status():
             await pubsub.subscribe("queue-updates")
             
             # Send initial queue status
-            if queue_service:
+            current_queue_service = queue_service
+            if not current_queue_service:
+                # Try to get from app state as fallback
                 try:
-                    initial_status = await queue_service.get_queue_status()
+                    from services import QueueService, RedisService
+                    from config import settings as config_settings
+                    
+                    # Create a temporary service for this request
+                    temp_redis = RedisService(config_settings.redis_url)
+                    current_queue_service = QueueService(temp_redis)
+                except Exception as e:
+                    error_data = {
+                        "type": "error",
+                        "message": f"Queue service not available: {str(e)}",
+                        "timestamp": asyncio.get_event_loop().time()
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+            
+            if current_queue_service:
+                try:
+                    initial_status = await current_queue_service.get_queue_status()
                     initial_data = {
                         "type": "initial_status",
                         "queue_depths": initial_status.queues,
@@ -193,15 +211,12 @@ async def stream_queue_status():
                         update_data = json.loads(message["data"])
                         yield f"data: {json.dumps(update_data)}\n\n"
                     elif message is None:
-                        # Timeout occurred, send heartbeat
-                        heartbeat_data = {
-                            "type": "heartbeat",
-                            "timestamp": asyncio.get_event_loop().time()
-                        }
-                        yield f"data: {json.dumps(heartbeat_data)}\n\n"
+                        # No message received, just continue without sending heartbeat
+                        # Heartbeats will be sent only on timeout
+                        continue
                         
                 except asyncio.TimeoutError:
-                    # Send heartbeat on timeout
+                    # Send heartbeat on timeout (every 30 seconds)
                     heartbeat_data = {
                         "type": "heartbeat", 
                         "timestamp": asyncio.get_event_loop().time()
