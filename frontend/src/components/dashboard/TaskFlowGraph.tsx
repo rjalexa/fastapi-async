@@ -46,9 +46,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.queues.primary 
-        ? 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'processing',
@@ -61,9 +59,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.states.ACTIVE 
-        ? 'bg-blue-100 border-2 border-blue-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'completed',
@@ -77,9 +73,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.states.COMPLETED 
-        ? 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'failed',
@@ -92,9 +86,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.states.FAILED 
-        ? 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'scheduled-queue',
@@ -107,9 +99,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.queues.scheduled 
-        ? 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'dlq',
@@ -123,9 +113,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.queues.dlq 
-        ? 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     },
     {
       id: 'retry-queue',
@@ -138,9 +126,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: queueStatus?.queues.retry 
-        ? 'bg-orange-100 border-2 border-orange-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
-        : 'bg-gray-100 border-2 border-gray-400 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
     }
   ], [queueStatus]);
 
@@ -158,49 +144,49 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       source: 'primary-queue',
       target: 'processing',
       animated: true,
-      style: { stroke: '#f57c00', strokeWidth: 2 }
+      style: { stroke: '#16a34a', strokeWidth: 2 }
     },
     {
       id: 'processing-completed',
       source: 'processing',
       target: 'completed',
       animated: true,
-      style: { stroke: '#4caf50', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#16a34a', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'processing-failed',
       source: 'processing',
       target: 'failed',
       animated: true,
-      style: { stroke: '#d32f2f', strokeWidth: 2 }
+      style: { stroke: '#ca8a04', strokeWidth: 2 }
     },
     {
       id: 'failed-scheduled',
       source: 'failed',
       target: 'scheduled-queue',
       animated: true,
-      style: { stroke: '#7b1fa2', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'failed-dlq',
       source: 'failed',
       target: 'dlq',
       animated: true,
-      style: { stroke: '#c62828', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#dc2626', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'scheduled-retry',
       source: 'scheduled-queue',
       target: 'retry-queue',
       animated: true,
-      style: { stroke: '#7b1fa2', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'retry-processing',
       source: 'retry-queue',
       target: 'processing',
       animated: true,
-      style: { stroke: '#ffa000', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     }
   ], []);
 
