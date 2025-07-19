@@ -65,8 +65,10 @@ const Layout: React.FC = () => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <Outlet />
+      <main className="w-full max-w-none mx-auto px-6 py-6" style={{ minWidth: '1200px' }}>
+        <div className="max-w-[1400px] mx-auto">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
