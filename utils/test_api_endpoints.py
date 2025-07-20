@@ -10,7 +10,7 @@ import asyncio
 import json
 import sys
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 import httpx
@@ -65,7 +65,7 @@ class APITester:
                 "actual_status": response.status_code,
                 "success": success,
                 "description": description,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "response_size": len(response.content),
             }
             
@@ -95,7 +95,68 @@ class APITester:
                 "actual_status": None,
                 "success": False,
                 "description": description,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "error": str(e),
+            }
+            self.test_results.append(result)
+            return result
+    
+    async def test_streaming_endpoint(
+        self, 
+        method: str, 
+        path: str, 
+        expected_status: int = 200,
+        description: str = ""
+    ) -> Dict[str, Any]:
+        """Test a streaming endpoint (Server-Sent Events)."""
+        url = f"{self.base_url}{path}"
+        
+        try:
+            # For streaming endpoints, we just check that they start properly
+            # and return the expected status code with the right content type
+            async with self.client.stream(method.upper(), url) as response:
+                success = response.status_code == expected_status
+                
+                # For SSE endpoints, check content type
+                content_type = response.headers.get("content-type", "")
+                is_sse = "text/event-stream" in content_type
+                
+                # Read first chunk to verify it's streaming
+                first_chunk = None
+                try:
+                    async for chunk in response.aiter_text():
+                        first_chunk = chunk[:100]  # First 100 chars
+                        break  # Just get the first chunk
+                except:
+                    pass
+                
+                result = {
+                    "method": method.upper(),
+                    "path": path,
+                    "url": url,
+                    "expected_status": expected_status,
+                    "actual_status": response.status_code,
+                    "success": success and is_sse,
+                    "description": description,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "content_type": content_type,
+                    "is_streaming": is_sse,
+                    "first_chunk": first_chunk,
+                }
+                
+                self.test_results.append(result)
+                return result
+                
+        except Exception as e:
+            result = {
+                "method": method.upper(),
+                "path": path,
+                "url": url,
+                "expected_status": expected_status,
+                "actual_status": None,
+                "success": False,
+                "description": description,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e),
             }
             self.test_results.append(result)
@@ -203,12 +264,12 @@ class APITester:
             description="List failed tasks"
         )
         
-        # Test without status parameter (should fail)
+        # Test without status parameter (should succeed - lists all tasks)
         await self.test_endpoint(
             "GET", 
             "/api/v1/tasks/", 
-            expected_status=400,
-            description="List tasks without status (expected 400)"
+            expected_status=200,
+            description="List all tasks without status filter"
         )
         
         # Test requeue orphaned tasks
@@ -220,6 +281,13 @@ class APITester:
         
         # Test queue status
         await self.test_endpoint("GET", "/api/v1/queues/status", description="Get queue status")
+        
+        # Test streaming queue status (just check it returns 200 and starts streaming)
+        await self.test_streaming_endpoint(
+            "GET", 
+            "/api/v1/queues/status/stream", 
+            description="Get streaming queue status"
+        )
         
         # Test DLQ tasks
         await self.test_endpoint("GET", "/api/v1/queues/dlq", description="Get DLQ tasks")
@@ -279,7 +347,7 @@ class APITester:
         """Run all endpoint tests."""
         print(f"Starting comprehensive API endpoint testing...")
         print(f"Base URL: {self.base_url}")
-        print(f"Started at: {datetime.utcnow().isoformat()}")
+        print(f"Started at: {datetime.now(timezone.utc).isoformat()}")
         print("=" * 60)
         
         # Run all test suites
@@ -332,7 +400,7 @@ class APITester:
         with open(filename, "w") as f:
             json.dump({
                 "test_run": {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "base_url": self.base_url,
                     "total_tests": len(self.test_results),
                     "successful_tests": sum(1 for r in self.test_results if r["success"]),
