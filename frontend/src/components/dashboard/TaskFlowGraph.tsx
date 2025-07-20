@@ -39,7 +39,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       case 'retry-queue':
         return 'queue=retry';
       case 'dlq':
-        return 'queue=dlq';
+        return 'status=DLQ';
       default:
         return '';
     }
@@ -101,7 +101,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       data: { 
         label: (
           <div className="text-center text-gray-800">
-            <div className="font-semibold">Primary Queue</div>
+            <div className="font-semibold">Primary</div>
             <div className="text-lg font-bold">{queueStatus?.queues.primary || 0}</div>
           </div>
         )
@@ -162,7 +162,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       data: { 
         label: (
           <div className="text-center text-gray-800">
-            <div className="font-semibold">Scheduled Queue</div>
+            <div className="font-semibold">Scheduled</div>
             <div className="text-lg font-bold">{queueStatus?.queues.scheduled || 0}</div>
           </div>
         )
@@ -178,7 +178,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       data: { 
         label: (
           <div className="text-center text-gray-800">
-            <div className="font-semibold">Dead Letter Queue</div>
+            <div className="font-semibold">Dead Letter</div>
             <div className="text-lg font-bold">{queueStatus?.queues.dlq || 0}</div>
           </div>
         )
@@ -193,7 +193,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       data: { 
         label: (
           <div className="text-center text-gray-800">
-            <div className="font-semibold">Retry Queue</div>
+            <div className="font-semibold">Retry</div>
             <div className="text-lg font-bold">{queueStatus?.queues.retry || 0}</div>
           </div>
         )

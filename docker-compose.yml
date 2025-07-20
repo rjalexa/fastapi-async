@@ -37,7 +37,7 @@ x-worker-environment: &worker-environment
   CELERY_BROKER_URL: ${CELERY_BROKER_URL}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
   C_FORCE_ROOT: 0
-  UV_CACHE_DIR: /home/celery/.cache/uv
+  UV_CACHE_DIR: /tmp/uv-cache
   HOME: /home/celery
   PYTHONDONTWRITEBYTECODE: 1
   PYTHONUNBUFFERED: 1
@@ -67,6 +67,13 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    # RDB snapshotting configuration for development
+    # Saves to disk if: 1 key changes in 15min, 10 keys in 5min, or 10000 keys in 1min
+    # For production, consider using AOF for better data durability:
+    # command: redis-server --appendonly yes
+    # Or use both RDB and AOF together:
+    # command: redis-server --save 900 1 --save 300 10 --save 60 10000 --appendonly yes
+    command: redis-server --save 900 1 --save 300 10 --save 60 10000 --stop-writes-on-bgsave-error no
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

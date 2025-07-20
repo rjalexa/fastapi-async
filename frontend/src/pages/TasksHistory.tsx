@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchTasks } from '@/lib/tasks-api';
-import { TaskDetail, TaskListResponse, TaskState, QueueName } from '@/lib/types';
+import { TaskDetail, TaskListResponse, TaskState } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,7 +19,6 @@ const TasksHistory: React.FC = () => {
   const [filters, setFilters] = useState({
     task_id: searchParams.get('task_id') || '',
     status: searchParams.get('status') || 'all',
-    queue: searchParams.get('queue') || 'all',
     page: parseInt(searchParams.get('page') || '1', 10),
   });
 
@@ -31,10 +30,6 @@ const TasksHistory: React.FC = () => {
       // Don't send status filter if "all" is selected
       if (filters.status === 'all' || filters.status === '') {
         filterParams.status = undefined;
-      }
-      // Don't send queue filter if empty or "all"
-      if (!filters.queue || filters.queue === '' || filters.queue === 'all') {
-        filterParams.queue = undefined;
       }
       // Only send task_id if it has at least 1 character
       if (filters.task_id && filters.task_id.trim().length > 0) {
@@ -75,14 +70,14 @@ const TasksHistory: React.FC = () => {
 
   const renderStateBadge = (state: TaskState) => {
     const colorMap: { [key in TaskState]: string } = {
-      [TaskState.PENDING]: 'bg-yellow-400',
-      [TaskState.ACTIVE]: 'bg-blue-500',
-      [TaskState.COMPLETED]: 'bg-green-500',
-      [TaskState.FAILED]: 'bg-red-500',
-      [TaskState.SCHEDULED]: 'bg-purple-500',
-      [TaskState.DLQ]: 'bg-gray-700',
+      [TaskState.PENDING]: 'bg-yellow-500 border-yellow-600',
+      [TaskState.ACTIVE]: 'bg-green-500 border-green-600',
+      [TaskState.COMPLETED]: 'bg-green-500 border-green-600',
+      [TaskState.FAILED]: 'bg-yellow-500 border-yellow-600',
+      [TaskState.SCHEDULED]: 'bg-yellow-500 border-yellow-600',
+      [TaskState.DLQ]: 'bg-red-500 border-red-600',
     };
-    return <Badge className={`${colorMap[state]} text-white`}>{state}</Badge>;
+    return <Badge className={`${colorMap[state]} text-white border`}>{state}</Badge>;
   };
 
   return (
@@ -107,22 +102,6 @@ const TasksHistory: React.FC = () => {
             {Object.values(TaskState).map((state) => (
               <SelectItem key={state} value={state}>
                 {state}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={filters.queue}
-          onValueChange={(value: string) => handleFilterChange('queue', value)}
-        >
-          <SelectTrigger className="w-[180px] bg-white border border-gray-300">
-            <SelectValue placeholder="Filter by Queue" />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-gray-300 shadow-lg">
-            <SelectItem value="all">All Queues</SelectItem>
-            {Object.values(QueueName).map((queue) => (
-              <SelectItem key={queue} value={queue}>
-                {queue.charAt(0).toUpperCase() + queue.slice(1)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -126,7 +126,7 @@ const Dashboard: React.FC = () => {
       {/* Task Flow Graph - moved to top */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Task Flow Overview
+          Task State Flow Overview
         </h3>
         <TaskFlowGraph queueStatus={queueStatus} />
       </div>

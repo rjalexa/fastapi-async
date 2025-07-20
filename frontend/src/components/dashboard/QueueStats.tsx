@@ -14,7 +14,7 @@ const QueueStats: React.FC<QueueStatsProps> = ({ queueStatus }) => {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Queue Depths</h3>
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Queues Depths</h3>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-orange-50 rounded-lg p-4 border border-orange-200 text-center">
           <p className="text-sm font-medium text-gray-600">Primary</p>

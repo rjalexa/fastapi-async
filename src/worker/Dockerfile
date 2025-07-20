@@ -32,13 +32,12 @@ WORKDIR /app
 # Copy dependency files
 COPY src/worker/pyproject.toml src/worker/uv.lock* ./
 
-# Create cache directory with proper permissions before installing
-RUN mkdir -p /home/celery/.cache/uv && \
-    chown -R celery:celery /home/celery/.cache
+# Create cache directory in /tmp (which has more space and is ephemeral)
+RUN mkdir -p /tmp/uv-cache && \
+    chmod 777 /tmp/uv-cache
 
-# Install dependencies as root but with cache owned by celery
-RUN UV_CACHE_DIR=/home/celery/.cache/uv uv sync --frozen && \
-    chown -R celery:celery /home/celery/.cache
+# Install dependencies using /tmp for cache
+RUN UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen
 
 # Copy application code
 COPY src/worker/ ./
@@ -62,7 +61,7 @@ USER celery
 # Set environment variables for non-root operation
 ENV C_FORCE_ROOT=0
 ENV CELERY_WORKER_HIJACK_ROOT_LOGGER=false
-ENV UV_CACHE_DIR=/home/celery/.cache/uv
+ENV UV_CACHE_DIR=/tmp/uv-cache
 ENV HOME=/home/celery
 ENV PATH=/home/celery/.local/bin:$PATH
 
