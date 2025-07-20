@@ -1,5 +1,6 @@
 # src/worker/circuit_breaker.py
 import os
+from typing import List, Dict, Any
 import pybreaker
 import httpx
 from config import settings
@@ -13,9 +14,20 @@ openrouter_breaker = pybreaker.CircuitBreaker(
 
 
 @openrouter_breaker
-async def call_openrouter_api(content: str) -> str:
-    """Call OpenRouter API with circuit breaker protection."""
-
+async def call_openrouter_api(messages: List[Dict[str, str]]) -> str:
+    """
+    Generic function to call OpenRouter API with circuit breaker protection.
+    
+    Args:
+        messages: List of message dictionaries for the chat completion API
+                 (e.g., [{"role": "user", "content": "..."}])
+    
+    Returns:
+        The response content from the API
+        
+    Raises:
+        Exception: If the API call fails
+    """
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"{settings.openrouter_base_url}/chat/completions",
@@ -25,7 +37,7 @@ async def call_openrouter_api(content: str) -> str:
             },
             json={
                 "model": settings.openrouter_model,
-                "messages": [{"role": "user", "content": f"Summarize: {content}"}],
+                "messages": messages,
             },
             timeout=settings.openrouter_timeout,
         )

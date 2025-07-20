@@ -25,6 +25,7 @@ from circuit_breaker import (
     openrouter_breaker,
 )
 from config import settings
+from prompts import load_and_format_prompt
 
 # --- Custom Exceptions ----------------------------------------------------
 
@@ -364,8 +365,20 @@ async def summarize_text_with_pybreaker(content: str) -> str:
     """Summarize text via OpenRouter protected by a circuit breaker."""
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
+    
     try:
-        return await call_openrouter_api(content)
+        # Load and format the summarization prompt
+        prompt_text = load_and_format_prompt("summarize", content=content)
+        
+        # Create the messages payload for the API
+        messages = [{"role": "user", "content": prompt_text}]
+        
+        # Call the generic OpenRouter API function
+        return await call_openrouter_api(messages)
+        
+    except (FileNotFoundError, ValueError) as e:
+        # Prompt loading/formatting errors are permanent
+        raise PermanentError(f"Prompt error: {str(e)}")
     except Exception as e:
         msg = str(e)
         if "circuit breaker" in msg.lower():
