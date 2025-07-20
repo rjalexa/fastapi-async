@@ -1,5 +1,6 @@
 // frontend/src/components/dashboard/TaskFlowGraph.tsx
 import React, { useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
   Node,
@@ -20,6 +21,65 @@ interface TaskFlowGraphProps {
 }
 
 const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
+  const navigate = useNavigate();
+
+  // Function to get filter parameters for navigation
+  const getFilterParams = (nodeId: string): string => {
+    switch (nodeId) {
+      case 'completed':
+        return 'status=COMPLETED';
+      case 'failed':
+        return 'status=FAILED';
+      case 'processing':
+        return 'status=ACTIVE';
+      case 'primary-queue':
+        return 'queue=primary';
+      case 'scheduled-queue':
+        return 'queue=scheduled';
+      case 'retry-queue':
+        return 'queue=retry';
+      case 'dlq':
+        return 'queue=dlq';
+      default:
+        return '';
+    }
+  };
+
+  // Function to get node count for determining if clickable
+  const getNodeCount = useCallback((nodeId: string): number => {
+    if (!queueStatus) return 0;
+    
+    switch (nodeId) {
+      case 'completed':
+        return queueStatus.states.COMPLETED || 0;
+      case 'failed':
+        return queueStatus.states.FAILED || 0;
+      case 'processing':
+        return queueStatus.states.ACTIVE || 0;
+      case 'primary-queue':
+        return queueStatus.queues.primary || 0;
+      case 'scheduled-queue':
+        return queueStatus.queues.scheduled || 0;
+      case 'retry-queue':
+        return queueStatus.queues.retry || 0;
+      case 'dlq':
+        return queueStatus.queues.dlq || 0;
+      default:
+        return 0;
+    }
+  }, [queueStatus]);
+
+  // Handle node click for navigation
+  const handleNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    const count = getNodeCount(node.id);
+    if (count > 0) {
+      const filterParams = getFilterParams(node.id);
+      if (filterParams) {
+        navigate(`/tasks-history?${filterParams}`);
+      }
+    }
+  }, [navigate, getNodeCount]);
+
   // Define the initial nodes based on the task flow - shifted left to prevent truncation
   const initialNodes: Node[] = useMemo(() => [
     {
@@ -46,7 +106,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('primary-queue') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
+      }`
     },
     {
       id: 'processing',
@@ -59,7 +121,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('processing') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
+      }`
     },
     {
       id: 'completed',
@@ -73,7 +137,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('completed') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
+      }`
     },
     {
       id: 'failed',
@@ -86,7 +152,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('failed') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
+      }`
     },
     {
       id: 'scheduled-queue',
@@ -99,7 +167,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('scheduled-queue') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
+      }`
     },
     {
       id: 'dlq',
@@ -113,7 +183,9 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('dlq') > 0 ? 'cursor-pointer hover:bg-red-200' : ''
+      }`
     },
     {
       id: 'retry-queue',
@@ -126,9 +198,11 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
+        getNodeCount('retry-queue') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
+      }`
     }
-  ], [queueStatus]);
+  ], [queueStatus, getNodeCount]);
 
   // Define the edges (connections between nodes) - matching the exact layout from the image
   const initialEdges: Edge[] = useMemo(() => [
@@ -211,6 +285,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeClick={handleNodeClick}
         fitView
         attributionPosition="bottom-left"
       >
