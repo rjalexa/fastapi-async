@@ -25,7 +25,7 @@ from circuit_breaker import (
     openrouter_breaker,
 )
 from config import settings
-from prompts import load_and_format_prompt
+from prompts import load_prompt
 
 # --- Custom Exceptions ----------------------------------------------------
 
@@ -367,11 +367,14 @@ async def summarize_text_with_pybreaker(content: str) -> str:
         raise PermanentError("OpenRouter API key not configured")
     
     try:
-        # Load and format the summarization prompt
-        prompt_text = load_and_format_prompt("summarize", content=content)
+        # Load the system prompt (no formatting needed - it's the complete system message)
+        system_prompt = load_prompt("summarize")
         
-        # Create the messages payload for the API
-        messages = [{"role": "user", "content": prompt_text}]
+        # Create the messages payload for the API with system and user roles
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Summarize this text: {content}"}
+        ]
         
         # Call the generic OpenRouter API function
         return await call_openrouter_api(messages)
