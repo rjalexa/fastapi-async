@@ -2,6 +2,7 @@
 """Service layer for task and queue management."""
 
 import json
+import math
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -11,7 +12,7 @@ import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
-from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP
+from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP, TaskListResponse
 
 
 class RedisService:
@@ -94,6 +95,7 @@ class TaskService:
             "completed_at": "",
             "result": "",
             "error_history": json.dumps([]),
+            "state_history": json.dumps([{"state": TaskState.PENDING.value, "timestamp": now.isoformat()}]),
         }
 
         # Use Redis transaction to ensure atomicity
@@ -131,6 +133,7 @@ class TaskService:
 
         # Parse JSON fields
         error_history = json.loads(task_data.get("error_history", "[]"))
+        state_history = json.loads(task_data.get("state_history", "[]"))
 
         # Convert string dates back to datetime objects
         created_at = datetime.fromisoformat(task_data["created_at"])
@@ -160,6 +163,7 @@ class TaskService:
             completed_at=completed_at,
             result=task_data.get("result") or None,
             error_history=error_history,
+            state_history=state_history,
         )
 
     async def retry_task(self, task_id: str, reset_retry_count: bool = False) -> bool:
@@ -172,10 +176,15 @@ class TaskService:
         if current_state not in [TaskState.FAILED.value, TaskState.DLQ.value]:
             return False
 
+        now = datetime.utcnow()
+        state_history = json.loads(task_data.get("state_history", "[]"))
+        state_history.append({"state": TaskState.PENDING.value, "timestamp": now.isoformat()})
+
         # Update task state
         updates = {
             "state": TaskState.PENDING.value,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": now.isoformat(),
+            "state_history": json.dumps(state_history),
         }
 
         if reset_retry_count:
@@ -278,29 +287,166 @@ class TaskService:
         except Exception:
             return False
 
-    async def get_task_ids_by_status(self, status: TaskState, limit: Optional[int] = None) -> List[str]:
-        """Get a list of task IDs filtered by their status."""
-        task_ids = []
-        count = 0
-        
-        try:
-            async for key in self.redis.scan_iter("task:*"):
-                # Check if we've reached the limit
-                if limit is not None and count >= limit:
-                    break
-                
-                # Get task state
-                task_state = await self.redis.hget(key, "state")
-                
-                if task_state == status.value:
-                    # Extract task_id from "task:uuid" format
-                    task_id = key.split(":", 1)[1]
-                    task_ids.append(task_id)
-                    count += 1
+    async def list_tasks(
+        self,
+        status: Optional[TaskState] = None,
+        queue: Optional[QueueName] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        page: int = 1,
+        page_size: int = 20,
+        task_id: Optional[str] = None,
+    ) -> TaskListResponse:
+        """List tasks with filtering, sorting, and pagination."""
+        if task_id:
+            task = await self.get_task(task_id)
+            if task:
+                return TaskListResponse(
+                    tasks=[task],
+                    page=1,
+                    page_size=1,
+                    total_items=1,
+                    total_pages=1,
+                    status=task.state,
+                )
+            else:
+                return TaskListResponse(
+                    tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0
+                )
+
+        all_tasks = []
+        async for key in self.redis.scan_iter("task:*"):
+            task_data = await self.redis.hgetall(key)
+            if task_data:
+                all_tasks.append(task_data)
+
+        # If no tasks found, return empty result
+        if not all_tasks:
+            return TaskListResponse(
+                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0
+            )
+
+        # Filtering
+        filtered_tasks = []
+        for task_data in all_tasks:
+            if status and task_data.get("state") != status.value:
+                continue
             
-            return task_ids
-        except Exception:
-            return []
+            # Safely parse created_at field
+            try:
+                created_at_str = task_data.get("created_at")
+                if created_at_str:
+                    created_at = datetime.fromisoformat(created_at_str)
+                    if start_date and created_at < start_date:
+                        continue
+                    if end_date and created_at > end_date:
+                        continue
+            except (ValueError, TypeError):
+                # Skip tasks with invalid created_at format
+                continue
+
+            # This is a simplified queue filter. A more robust implementation
+            # would require storing the queue in the task hash.
+            if queue:
+                 # This is a placeholder for more complex queue filtering logic
+                 pass
+
+            filtered_tasks.append(task_data)
+
+        # If no tasks after filtering, return empty result
+        if not filtered_tasks:
+            return TaskListResponse(
+                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0
+            )
+
+        # Sorting
+        reverse = sort_order.lower() == "desc"
+        
+        def sort_key_func(task_data):
+            val = task_data.get(sort_by)
+            if val is None:
+                # If the field doesn't exist, return a default value for sorting
+                if sort_by in ["created_at", "updated_at", "completed_at"]:
+                    return datetime.min if not reverse else datetime.max
+                elif sort_by in ["retry_count", "max_retries"]:
+                    return 0
+                else:
+                    return ""
+            
+            if isinstance(val, str) and val.isdigit():
+                return int(val)
+            if isinstance(val, str):
+                try:
+                    return datetime.fromisoformat(val)
+                except ValueError:
+                    return val
+            return val
+
+        try:
+            filtered_tasks.sort(key=sort_key_func, reverse=reverse)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Invalid sort key '{sort_by}': {e}")
+
+
+        # Pagination
+        total_items = len(filtered_tasks)
+        total_pages = math.ceil(total_items / page_size)
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_data = filtered_tasks[start_index:end_index]
+
+        tasks = []
+        for task_data in paginated_data:
+            try:
+                error_history = json.loads(task_data.get("error_history", "[]"))
+                state_history = json.loads(task_data.get("state_history", "[]"))
+                
+                # Safely parse datetime fields
+                created_at = datetime.fromisoformat(task_data["created_at"])
+                updated_at = datetime.fromisoformat(task_data["updated_at"])
+                completed_at = (
+                    datetime.fromisoformat(task_data["completed_at"])
+                    if task_data.get("completed_at")
+                    else None
+                )
+                retry_after = (
+                    datetime.fromisoformat(task_data["retry_after"])
+                    if task_data.get("retry_after")
+                    else None
+                )
+                
+                tasks.append(
+                    TaskDetail(
+                        task_id=task_data["task_id"],
+                        state=TaskState(task_data["state"]),
+                        content=task_data["content"],
+                        retry_count=int(task_data["retry_count"]),
+                        max_retries=int(task_data["max_retries"]),
+                        last_error=task_data.get("last_error") or None,
+                        error_type=task_data.get("error_type") or None,
+                        retry_after=retry_after,
+                        created_at=created_at,
+                        updated_at=updated_at,
+                        completed_at=completed_at,
+                        result=task_data.get("result") or None,
+                        error_history=error_history,
+                        state_history=state_history,
+                    )
+                )
+            except (ValueError, TypeError, KeyError) as e:
+                # Skip tasks with invalid data
+                continue
+
+        return TaskListResponse(
+            tasks=tasks,
+            page=page,
+            page_size=page_size,
+            total_items=total_items,
+            total_pages=total_pages,
+            status=status,
+        )
 
 
 class QueueService:

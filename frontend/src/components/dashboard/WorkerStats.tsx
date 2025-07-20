@@ -77,7 +77,9 @@ const WorkerStats: React.FC<WorkerStatsProps> = ({ isConnected }) => {
     const heartbeat = worker.last_heartbeat || worker.timestamp;
     if (!heartbeat) return 'Never';
     try {
-      const date = new Date(heartbeat * 1000); // Convert from Unix timestamp
+      // Try parsing as number first (Unix timestamp), then as ISO string
+      const timestamp = isNaN(Number(heartbeat)) ? heartbeat : Number(heartbeat) * 1000;
+      const date = new Date(timestamp);
       return date.toLocaleTimeString();
     } catch {
       return 'Unknown';

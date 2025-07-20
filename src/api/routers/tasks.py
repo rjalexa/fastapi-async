@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional
 from celery import Celery
 
-from schemas import TaskDetail, TaskResponse, TaskRetryRequest, TaskDeleteResponse, TaskListResponse, TaskState
+from schemas import TaskDetail, TaskResponse, TaskRetryRequest, TaskDeleteResponse, TaskListResponse, TaskState, QueueName
+from datetime import datetime
 from services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["task-management"])
@@ -30,38 +31,36 @@ def get_task_service() -> TaskService:
 
 
 @router.get("/", response_model=TaskListResponse)
-async def list_tasks_by_status(
-    task_status: Optional[TaskState] = Query(None, alias="status", description="Filter tasks by status"),
-    limit: Optional[int] = Query(100, description="Maximum number of task IDs to return", ge=1, le=1000),
+async def list_tasks(
+    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    queue: Optional[QueueName] = Query(None, description="Filter tasks by queue"),
+    start_date: Optional[datetime] = Query(None, description="Start date for filtering"),
+    end_date: Optional[datetime] = Query(None, description="End date for filtering"),
+    sort_by: Optional[str] = Query("created_at", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc or desc)"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    task_id: Optional[str] = Query(None, description="Search by task ID"),
     task_svc: TaskService = Depends(get_task_service)
 ) -> TaskListResponse:
     """
-    List task IDs filtered by status.
-
-    - **status**: Task status to filter by (optional, shows dropdown in Swagger UI)
-    - **limit**: Maximum number of task IDs to return (default: 100, max: 1000)
-
-    Returns a list of task IDs matching the specified criteria.
-    Works for tasks of any type (summarization, entity detection, etc.).
+    List and filter tasks with pagination, sorting, and advanced filtering.
     """
     try:
-        if task_status is None:
-            # If no status specified, we could return all tasks, but that might be too many
-            # For now, let's require a status filter
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Status parameter is required. Please specify a task status to filter by.",
-            )
-        
-        task_ids = await task_svc.get_task_ids_by_status(task_status, limit)
-        
-        return TaskListResponse(
-            task_ids=task_ids,
-            count=len(task_ids),
-            status=task_status
+        result = await task_svc.list_tasks(
+            status=task_status,
+            queue=queue,
+            start_date=start_date,
+            end_date=end_date,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=page,
+            page_size=page_size,
+            task_id=task_id,
         )
-    except HTTPException:
-        raise
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

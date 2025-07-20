@@ -1,66 +1,188 @@
-// frontend/src/pages/TasksHistory.tsx
-import React from 'react';
-import { Clock, Search, Filter } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { fetchTasks } from '@/lib/tasks-api';
+import { TaskDetail, TaskListResponse, TaskState, QueueName } from '@/lib/types';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { format } from 'date-fns';
 
 const TasksHistory: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tasksResponse, setTasksResponse] = useState<TaskListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [filters, setFilters] = useState({
+    task_id: searchParams.get('task_id') || '',
+    status: searchParams.get('status') || 'all',
+    queue: (searchParams.get('queue') as QueueName) || '',
+    page: parseInt(searchParams.get('page') || '1', 10),
+  });
+
+  const loadTasks = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const filterParams: Record<string, unknown> = { ...filters, page_size: 10 };
+      // Don't send status filter if "all" is selected
+      if (filters.status === 'all' || filters.status === '') {
+        filterParams.status = undefined;
+      }
+      const data = await fetchTasks(filterParams);
+      setTasksResponse(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    loadTasks();
+    setSearchParams(
+      Object.fromEntries(
+        Object.entries(filters).map(([key, value]) => [key, String(value)])
+      )
+    );
+  }, [loadTasks, filters, setSearchParams]);
+
+  const handleFilterChange = (key: string, value: string | number) => {
+    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setFilters((prev) => ({ ...prev, page: newPage }));
+  };
+
+  const renderStateBadge = (state: TaskState) => {
+    const colorMap: { [key in TaskState]: string } = {
+      [TaskState.PENDING]: 'bg-yellow-400',
+      [TaskState.ACTIVE]: 'bg-blue-500',
+      [TaskState.COMPLETED]: 'bg-green-500',
+      [TaskState.FAILED]: 'bg-red-500',
+      [TaskState.SCHEDULED]: 'bg-purple-500',
+      [TaskState.DLQ]: 'bg-gray-700',
+    };
+    return <Badge className={`${colorMap[state]} text-white`}>{state}</Badge>;
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tasks History</h1>
-          <p className="text-sm text-gray-600">
-            View and analyze historical task execution data
-          </p>
-        </div>
+      <h1 className="text-2xl font-bold">Tasks History</h1>
+      <div className="flex items-center space-x-4">
+        <Input
+          placeholder="Search by Task ID..."
+          value={filters.task_id}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('task_id', e.target.value)}
+          className="max-w-sm"
+        />
+        <Select
+          value={filters.status}
+          onValueChange={(value: string) => handleFilterChange('status', value)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {Object.values(TaskState).map((state) => (
+              <SelectItem key={state} value={state}>
+                {state}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button onClick={loadTasks}>Search</Button>
       </div>
 
-      {/* Placeholder Content */}
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-gray-100">
-            <Clock className="h-6 w-6 text-gray-400" />
-          </div>
-          <h3 className="mt-4 text-lg font-medium text-gray-900">Tasks History</h3>
-          <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
-            This page will display historical task data including execution times, 
-            success rates, and detailed task logs for analysis and debugging.
-          </p>
-          
-          {/* Feature Preview */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <Search className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">Search & Filter</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Find tasks by ID, status, date range, or error type
-              </p>
+      {loading && <p>Loading...</p>}
+      {error && <p className="text-red-500">{error}</p>}
+
+      {tasksResponse && (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Task ID</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created At</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tasksResponse.tasks.map((task: TaskDetail) => (
+                <TableRow key={task.task_id}>
+                  <TableCell className="font-mono">{task.task_id.substring(0, 12)}...</TableCell>
+                  <TableCell>{renderStateBadge(task.state)}</TableCell>
+                  <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
+                  <TableCell>
+                    {task.completed_at
+                      ? `${(new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000}s`
+                      : 'N/A'}
+                  </TableCell>
+                  <TableCell>
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button variant="outline" size="sm">View Details</Button>
+                      </SheetTrigger>
+                      <SheetContent className="w-[600px] sm:w-[800px]">
+                        <SheetHeader>
+                          <SheetTitle>Task Details: {task.task_id}</SheetTitle>
+                        </SheetHeader>
+                        <div className="py-4 space-y-4">
+                          <div><strong>Content:</strong><pre className="bg-gray-100 p-2 rounded-md">{task.content}</pre></div>
+                          <div><strong>Result:</strong><pre className="bg-gray-100 p-2 rounded-md">{task.result || 'N/A'}</pre></div>
+                          <h3 className="font-bold mt-4">State History</h3>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>State</TableHead>
+                                <TableHead>Timestamp</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {task.state_history.map((entry, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{renderStateBadge(entry.state)}</TableCell>
+                                  <TableCell>{format(new Date(entry.timestamp), 'PPpp')}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </SheetContent>
+                    </Sheet>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Showing page {tasksResponse.page} of {tasksResponse.total_pages}
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={() => handlePageChange(filters.page - 1)}
+                disabled={filters.page <= 1}
+              >
+                Previous
+              </Button>
+              <Button
+                onClick={() => handlePageChange(filters.page + 1)}
+                disabled={filters.page >= tasksResponse.total_pages}
+              >
+                Next
+              </Button>
             </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4">
-              <Filter className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">Advanced Filtering</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Filter by execution time, retry count, or worker node
-              </p>
-            </div>
-            
-            <div className="bg-gray-50 rounded-lg p-4">
-              <Clock className="h-5 w-5 text-gray-400 mx-auto mb-2" />
-              <h4 className="text-sm font-medium text-gray-900">Timeline View</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Visualize task execution patterns over time
-              </p>
-            </div>
           </div>
-          
-          <div className="mt-6">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              Coming Soon
-            </span>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 };

@@ -68,6 +68,9 @@ class TaskDetail(BaseModel):
     error_history: List[Dict[str, Any]] = Field(
         default_factory=list, description="History of errors"
     )
+    state_history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="History of state transitions"
+    )
 
 
 class QueueStatus(BaseModel):
@@ -113,6 +116,9 @@ class TaskDeleteResponse(BaseModel):
 class TaskListResponse(BaseModel):
     """Schema for task list response."""
 
-    task_ids: List[str] = Field(..., description="List of task IDs matching the criteria")
-    count: int = Field(..., description="Number of tasks found")
+    tasks: List[TaskDetail] = Field(..., description="List of tasks matching the criteria")
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of items per page")
+    total_items: int = Field(..., description="Total number of items")
+    total_pages: int = Field(..., description="Total number of pages")
     status: Optional[TaskState] = Field(None, description="Filter status used")
