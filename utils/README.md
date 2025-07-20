@@ -370,6 +370,116 @@ Created Task IDs:
 💡 Use --cleanup flag to automatically delete created tasks
 ```
 
+### `gen_10_summaries_multilingual.py`
+
+**NEW**: Multilingual fake news summarization task generator that creates and submits 10 diverse summarization tasks for testing multilingual content processing.
+
+This script generates 5 Italian fake news articles (~300 words each) and 5 articles in other widespread languages (Spanish, French, German, Portuguese, English), then submits them all as summarization tasks to test the system's multilingual capabilities.
+
+#### Usage
+
+```bash
+# Basic usage - generate and submit all 10 tasks
+python3 utils/gen_10_summaries_multilingual.py
+
+# Custom delay between submissions
+python3 utils/gen_10_summaries_multilingual.py --delay 1.0
+
+# Show queue status before and after
+python3 utils/gen_10_summaries_multilingual.py --show-queue-status
+
+# Monitor task progress for 60 seconds after creation
+python3 utils/gen_10_summaries_multilingual.py --monitor 60
+
+# Target different API URL
+python3 utils/gen_10_summaries_multilingual.py --url http://staging.example.com:8000
+
+# Combine all options
+python3 utils/gen_10_summaries_multilingual.py --delay 0.5 --show-queue-status --monitor 30
+```
+
+#### Command Line Options
+
+- `--delay N`: Delay between task submissions in seconds (default: 1.0)
+- `--url URL`: Base URL for the API (default: http://localhost:8000)
+- `--monitor N`: Monitor task progress for N seconds after creation (default: 0 = no monitoring)
+- `--show-queue-status`: Show queue status before and after task generation
+
+#### Features
+
+- **Multilingual Content**: 5 Italian + 5 other languages (Spanish, French, German, Portuguese, English)
+- **Realistic Fake News**: Each article ~300 words with authentic fake news patterns
+- **Diverse Topics**: Health misinformation, political conspiracies, economic scandals, celebrity gossip, technology fears
+- **Progress Tracking**: Real-time feedback on task creation success/failure
+- **Queue Monitoring**: Optional before/after queue status display
+- **Task Progress Monitoring**: Optional monitoring of task state transitions
+- **Content Variety**: Different conspiracy theories and misinformation patterns per language
+- **Character Count Tracking**: Shows content length for each submitted task
+
+#### Generated Content Types
+
+**Italian Articles:**
+1. Health misinformation (COVID-19 vaccine nanochips)
+2. Political conspiracy (Salvini-Putin secret agreement)
+3. Economic conspiracy (Bank of Italy printing fake money for mafia)
+4. Celebrity scandal (Chiara Ferragni organ trafficking)
+5. Environmental conspiracy (Vesuvius eruption cover-up)
+
+**Other Languages:**
+1. **Spanish**: Political conspiracy (Sánchez-Soros destruction plan)
+2. **French**: Health misinformation (Macron hiding vaccine deaths)
+3. **German**: Economic conspiracy (Scholz selling Germany to China)
+4. **Portuguese**: Celebrity scandal (Cristiano Ronaldo money laundering)
+5. **English**: Technology conspiracy (Musk's Neuralink prisoner experiments)
+
+#### Perfect for Testing
+
+- **Multilingual Processing**: Test summarization across different languages
+- **Content Variety**: Diverse fake news patterns and conspiracy theories
+- **System Load**: 10 simultaneous tasks to test worker capacity
+- **Language Detection**: Verify system handles different character sets
+- **Content Length**: All articles ~300 words for consistent processing time
+- **Real-world Scenarios**: Authentic fake news patterns for realistic testing
+
+#### Example Output
+
+```
+Multilingual Fake News Summarization Task Generator
+Target: http://localhost:8000
+Tasks to create: 10 (5 Italian + 5 other languages)
+Delay between submissions: 0.5s
+
+Generating 10 multilingual fake news summarization tasks...
+Submitting Italian Fake News #1 (1510 chars)...
+  ✅ Created: df0235f3-fc9e-4a30-afc1-6911230cd24a
+Submitting Italian Fake News #2 (1454 chars)...
+  ✅ Created: 5c1d5af9-4c85-4bc8-8c3a-763adc4c1eb7
+...
+Submitting English Fake News #5 (1533 chars)...
+  ✅ Created: f0f7bd4e-c96d-4840-bc42-d792f5db6f59
+
+MULTILINGUAL FAKE NEWS TASK GENERATION SUMMARY
+Total tasks attempted: 10
+Successfully created: 10
+Failed: 0
+Success rate: 100.0%
+
+Language Distribution:
+  Italian articles: 5
+  Other languages: 5
+
+🎉 All 10 multilingual tasks created successfully!
+💡 Use --monitor flag to track task processing progress
+```
+
+#### Dependencies
+
+Requires `httpx` for async HTTP client functionality:
+
+```bash
+python3 -m pip install httpx --user
+```
+
 ### `test_realtime_updates.py`
 
 Test utility for the real-time Server-Sent Events (SSE) queue monitoring system.

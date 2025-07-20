@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
 
     # Worker Configuration
-    worker_concurrency: int = Field(default=4, env="WORKER_CONCURRENCY")
+    worker_concurrency: int = Field(default=2, env="WORKER_CONCURRENCY")
     worker_prefetch_multiplier: int = Field(default=1, env="WORKER_PREFETCH_MULTIPLIER")
     task_soft_time_limit: int = Field(
         default=300, env="TASK_SOFT_TIME_LIMIT"
@@ -75,9 +75,11 @@ class Settings(BaseSettings):
         default=300, env="CELERY_TASK_SOFT_TIME_LIMIT"
     )
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "extra": "ignore"  # Ignore extra environment variables
+    }
 
 
 # Global settings instance

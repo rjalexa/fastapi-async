@@ -63,7 +63,7 @@ ERROR_CLASSIFICATIONS = {
 
 RETRY_SCHEDULES = {
     "InsufficientCredits": [300, 600, 1800],  # 5min, 10min, 30min
-    "RateLimitError": [60, 120, 300, 600],
+    "RateLimitError": [120, 300, 600, 1200],  # 2min, 5min, 10min, 20min - longer delays for rate limits
     "ServiceUnavailable": [5, 10, 30, 60, 120],
     "NetworkTimeout": [2, 5, 10, 30, 60],
     "Default": [5, 15, 60, 300],
