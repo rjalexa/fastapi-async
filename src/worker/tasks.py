@@ -21,6 +21,8 @@ from circuit_breaker import (
     call_openrouter_api,
     get_circuit_breaker_status,
     reset_circuit_breaker,
+    open_circuit_breaker,
+    openrouter_breaker,
 )
 from config import settings
 
@@ -119,6 +121,25 @@ def reset_worker_circuit_breaker(panel, **kwargs):
         return {
             "status": "success",
             "message": "Circuit breaker reset.",
+            "new_state": get_circuit_breaker_status(),
+            "worker_id": f"worker-{os.getpid()}",
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "worker_id": f"worker-{os.getpid()}",
+        }
+
+
+@Panel.register
+def open_worker_circuit_breaker(panel, **kwargs):
+    """Open the circuit breaker on this worker (invoked via broadcast)."""
+    try:
+        open_circuit_breaker()
+        return {
+            "status": "success",
+            "message": "Circuit breaker opened.",
             "new_state": get_circuit_breaker_status(),
             "worker_id": f"worker-{os.getpid()}",
         }

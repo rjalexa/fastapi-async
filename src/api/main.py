@@ -5,16 +5,32 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import health, tasks, queues, summarize
+from routers import health, tasks, queues, summarize, workers
 from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
 
-# Note: No Celery app needed in API anymore
-# Workers consume directly from Redis queues
-celery_app = None
+# Create Celery app for worker communication (broadcast commands)
+from celery import Celery
+
+celery_app = Celery(
+    "asynctaskflow-api",
+    broker=settings.celery_broker_url,
+    backend=None,  # No result backend needed for API
+)
+
+# Configure Celery for API (minimal config for worker communication)
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    task_ignore_result=True,
+)
 
 
 async def initialize_services() -> tuple:
@@ -94,6 +110,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Set Celery app in task routers
 tasks.celery_app = celery_app
 summarize.celery_app = celery_app
@@ -103,6 +128,7 @@ app.include_router(summarize.router)  # Application endpoints first
 app.include_router(health.router)
 app.include_router(tasks.router)
 app.include_router(queues.router)
+app.include_router(workers.router)
 
 
 @app.get("/")

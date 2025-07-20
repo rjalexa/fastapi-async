@@ -114,8 +114,9 @@ class APITester:
         await self.test_endpoint("GET", "/health", description="Main health check")
         await self.test_endpoint("GET", "/ready", description="Readiness check")
         await self.test_endpoint("GET", "/live", description="Liveness check")
-        await self.test_endpoint("GET", "/health/workers", description="Worker health check")
-        await self.test_endpoint("POST", "/health/workers/reset-circuit-breaker", description="Reset circuit breakers")
+        await self.test_endpoint("GET", "/api/v1/workers/", description="Worker health check")
+        await self.test_endpoint("POST", "/api/v1/workers/reset-circuit-breaker", description="Reset circuit breakers")
+        await self.test_endpoint("POST", "/api/v1/workers/open-circuit-breaker", description="Open circuit breakers")
     
     async def test_task_creation(self) -> Optional[str]:
         """Test task creation and return a task ID for further testing."""
