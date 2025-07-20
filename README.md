@@ -1,510 +1,264 @@
-# AsyncTaskFlow API Service
+# AsyncTaskFlow
 
-A production-ready distributed task processing system built with FastAPI, Celery, and Redis. This service provides robust text summarization capabilities with advanced error handling, circuit breaker patterns, and comprehensive monitoring.
+**A production-ready, distributed task processing system built with FastAPI, Python, and Redis.**
 
-## Features
+This project provides a robust framework for handling asynchronous tasks, featuring a sophisticated queueing system, circuit breaker protection, and a comprehensive real-time monitoring dashboard.
 
-- **Asynchronous Task Processing**: Distributed task queue using Celery with Redis backend
-- **Circuit Breaker Protection**: Built-in circuit breaker for external API calls
-- **Advanced Retry Logic**: Intelligent retry scheduling with exponential backoff
-- **Health Monitoring**: Comprehensive health checks for workers and system components
-- **Real-time Monitoring**: Built-in API endpoints for comprehensive system monitoring
-- **Production Ready**: Docker-based deployment with proper logging and error handling
+[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/downloads/release/python-311/)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-green.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-24-blue.svg)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Quick Start
+## 1. Overview
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd asynctaskflow
-   ```
+AsyncTaskFlow is designed to solve the common problem of managing long-running, resource-intensive tasks in a web application without blocking the main request-response cycle. It provides a scalable and resilient architecture for processing tasks in the background, complete with error handling, automatic retries, and detailed monitoring.
 
-2. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
+### Key Features
 
-3. **Start the services**
-   ```bash
-   docker compose up -d
-   ```
+- **Asynchronous Task Processing**: Distributed task queue using a custom Redis-based solution.
+- **Decoupled Architecture**: API, queuing, and execution layers are fully independent.
+- **Circuit Breaker Protection**: Built-in circuit breaker for external API calls to prevent cascading failures.
+- **Advanced Retry Logic**: Intelligent retry scheduling with exponential backoff and dedicated retry queues.
+- **Real-time Monitoring**: A comprehensive frontend dashboard with live updates via Server-Sent Events (SSE).
+- **Production Ready**: Docker-based deployment with proper logging, health checks, and resource management.
+- **Horizontal Scalability**: Easily scale worker capacity to meet demand.
 
-4. **Access the services**
-   - API Documentation: http://localhost:8000/docs
-   - System Monitoring: http://localhost:8000/health
-   - Frontend UI: http://localhost:3000
+## 2. Table of Contents
 
-## Performance Management
+- [AsyncTaskFlow](#asynctaskflow)
+  - [1. Overview](#1-overview)
+    - [Key Features](#key-features)
+  - [2. Table of Contents](#2-table-of-contents)
+  - [3. Architecture](#3-architecture)
+    - [System Architecture Diagram](#system-architecture-diagram)
+    - [Tech Stack](#tech-stack)
+    - [Key Components](#key-components)
+    - [Data Flow \& Task Lifecycle](#data-flow--task-lifecycle)
+  - [4. Prerequisites](#4-prerequisites)
+  - [5. Quick Start](#5-quick-start)
+  - [6. Usage](#6-usage)
+  - [7. API Reference](#7-api-reference)
+    - [Health Checks](#health-checks)
+    - [Task Creation (Application-Specific)](#task-creation-application-specific)
+    - [Generic Task Management](#generic-task-management)
+    - [Queue Monitoring \& Management](#queue-monitoring--management)
+    - [Worker Management](#worker-management)
+  - [8. Redis Data Structures](#8-redis-data-structures)
+    - [Task Queues](#task-queues)
+    - [Task Metadata](#task-metadata)
+    - [Monitoring \& Metrics](#monitoring--metrics)
+  - [9. Development](#9-development)
+    - [Running Locally](#running-locally)
+    - [System Reset](#system-reset)
+  - [10. Performance Management](#10-performance-management)
+  - [11. Troubleshooting](#11-troubleshooting)
 
-The system provides extensive configuration options to optimize performance for different host capabilities and workload requirements.
+## 3. Architecture
 
-### Resource Configuration
+The system is composed of several key services, each running in its own Docker container and orchestrated by Docker Compose.
 
-All performance settings are controlled through environment variables in your `.env` file:
-
-#### Worker Scaling
-```bash
-# Number of worker containers to run
-WORKER_REPLICAS=3
-
-# Tasks processed concurrently per worker
-CELERY_WORKER_CONCURRENCY=4
-
-# Tasks prefetched per worker (1 = sequential, higher = parallel)
-WORKER_PREFETCH_MULTIPLIER=1
-```
-
-#### Memory Management
-```bash
-# Container-level memory limits
-WORKER_MEMORY_LIMIT=512M          # Maximum memory per worker container
-WORKER_MEMORY_RESERVATION=256M    # Guaranteed memory per worker container
-
-# Process-level memory limits
-WORKER_MAX_MEMORY_PER_CHILD=200000 # Max memory per worker process (KB)
-WORKER_MAX_TASKS_PER_CHILD=1000   # Tasks before worker process restart
-```
-
-#### CPU Management
-```bash
-# CPU limits per worker container
-WORKER_CPU_LIMIT=1.0              # Maximum CPU cores (1.0 = 1 full core)
-WORKER_CPU_RESERVATION=0.5        # Guaranteed CPU cores
-```
-
-#### Task Timeouts
-```bash
-# Task execution limits
-CELERY_TASK_TIME_LIMIT=900        # Hard timeout (15 minutes)
-CELERY_TASK_SOFT_TIME_LIMIT=600   # Soft warning (10 minutes)
-OPENROUTER_TIMEOUT=120            # API call timeout (2 minutes)
-```
-
-### Performance Profiles
-
-#### Development Environment (Low Resources)
-```bash
-# Minimal resource usage for development
-WORKER_REPLICAS=1
-CELERY_WORKER_CONCURRENCY=2
-WORKER_MEMORY_LIMIT=256M
-WORKER_MEMORY_RESERVATION=128M
-WORKER_CPU_LIMIT=0.5
-WORKER_CPU_RESERVATION=0.25
-WORKER_PREFETCH_MULTIPLIER=1
-```
-
-#### Production Environment (Standard)
-```bash
-# Balanced configuration for production
-WORKER_REPLICAS=3
-CELERY_WORKER_CONCURRENCY=4
-WORKER_MEMORY_LIMIT=512M
-WORKER_MEMORY_RESERVATION=256M
-WORKER_CPU_LIMIT=1.0
-WORKER_CPU_RESERVATION=0.5
-WORKER_PREFETCH_MULTIPLIER=1
-```
-
-#### High-Throughput Environment
-```bash
-# Optimized for high task volume
-WORKER_REPLICAS=5
-CELERY_WORKER_CONCURRENCY=8
-WORKER_MEMORY_LIMIT=1G
-WORKER_MEMORY_RESERVATION=512M
-WORKER_CPU_LIMIT=2.0
-WORKER_CPU_RESERVATION=1.0
-WORKER_PREFETCH_MULTIPLIER=2
-```
-
-#### Memory-Constrained Environment
-```bash
-# Optimized for limited memory
-WORKER_REPLICAS=2
-CELERY_WORKER_CONCURRENCY=2
-WORKER_MEMORY_LIMIT=256M
-WORKER_MEMORY_RESERVATION=128M
-WORKER_CPU_LIMIT=1.0
-WORKER_CPU_RESERVATION=0.5
-WORKER_MAX_MEMORY_PER_CHILD=100000
-WORKER_MAX_TASKS_PER_CHILD=500
-```
-
-### Monitoring and Health Checks
-
-Configure health check behavior for different environments:
-
-```bash
-# Health check intervals
-WORKER_HEALTH_CHECK_INTERVAL=30s  # How often to check
-WORKER_HEALTH_CHECK_TIMEOUT=10s   # Timeout per check
-WORKER_HEALTH_CHECK_RETRIES=3     # Retries before marking unhealthy
-WORKER_HEALTH_CHECK_START_PERIOD=60s # Grace period on startup
-
-# Graceful shutdown
-WORKER_STOP_GRACE_PERIOD=30s      # Time for graceful shutdown
-```
-
-### Performance Tuning Tips
-
-1. **Worker Scaling**: Start with `WORKER_REPLICAS = CPU_CORES` and adjust based on task type
-2. **Concurrency**: For I/O-bound tasks (API calls), use higher concurrency (4-8 per core)
-3. **Memory**: Monitor actual usage and set limits 20-30% above peak usage
-4. **Prefetch**: Use `WORKER_PREFETCH_MULTIPLIER=1` for long-running tasks to ensure fair distribution
-5. **Task Limits**: Set `WORKER_MAX_TASKS_PER_CHILD` to prevent memory leaks in long-running workers
-
-### Monitoring Performance
-
-#### Check Worker Status
-```bash
-# View worker health and circuit breaker status
-curl http://localhost:8000/health/workers
-
-# Get detailed worker diagnostics
-curl http://localhost:8000/health/workers/diagnostics
-```
-
-#### Monitor Resource Usage
-```bash
-# Check container resource usage
-docker stats
-
-# View worker logs
-docker compose logs worker
-
-# Monitor queue status
-curl http://localhost:8000/api/v1/queues/status
-```
-
-#### Built-in Monitoring Dashboard
-Access comprehensive monitoring through the API endpoints:
-- Queue status and depths: `GET /api/v1/queues/status`
-- Worker health and performance: `GET /health/workers`
-- Dead letter queue analysis: `GET /api/v1/queues/dlq`
-- Individual task details: `GET /api/v1/tasks/{task_id}`
-
-### Troubleshooting Performance Issues
-
-#### High Memory Usage
-1. Reduce `CELERY_WORKER_CONCURRENCY`
-2. Lower `WORKER_MAX_TASKS_PER_CHILD`
-3. Decrease `WORKER_MEMORY_LIMIT` to force earlier container restarts
-
-#### Slow Task Processing
-1. Increase `WORKER_REPLICAS`
-2. Increase `CELERY_WORKER_CONCURRENCY`
-3. Check `OPENROUTER_TIMEOUT` for API bottlenecks
-
-#### Container Crashes
-1. Increase `WORKER_MEMORY_LIMIT`
-2. Check logs for out-of-memory errors
-3. Reduce `WORKER_MAX_MEMORY_PER_CHILD`
-
-#### Circuit Breaker Activation
-1. Check OpenRouter API status
-2. Increase `OPENROUTER_TIMEOUT`
-3. Reset circuit breakers: `curl -X POST http://localhost:8000/health/workers/reset-circuit-breaker`
-
-## Architecture
-
-### System Components
-
-The system consists of several components:
-
-- **FastAPI Application**: REST API for task management
-- **Celery Workers**: Distributed task processors
-- **Redis**: Message broker and result backend
-- **Custom Queue Consumer**: Intelligent task distribution system
-- **Circuit Breaker**: Protection against external service failures
-
-### Task Flow Architecture
-
-The system implements a sophisticated queue architecture that provides fine-grained control over task processing while maintaining scalability and fault tolerance. Here's how a task flows through the system:
+### System Architecture Diagram
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │                 │     │                 │     │                 │
 │  Client Request │────▶│   FastAPI App   │────▶│  Redis Storage  │
-│                 │     │   (REST API)    │     │ (Task Metadata) │
+│ (e.g., Frontend)│     │   (REST API)    │     │ (Task & Metrics)│
 │                 │     │                 │     │                 │
 └─────────────────┘     └─────────────────┘     └────────┬────────┘
                                                           │
                         ┌─────────────────┐               │
                         │                 │               │
-                        │ Custom Redis    │◀──────────────┘
-                        │ Queue (Primary) │
+                        │  Custom Redis   │◀──────────────┘
+                        │     Queues      │
                         │                 │
                         └────────┬────────┘
                                  │
                         ┌────────▼────────┐     ┌─────────────────┐
                         │                 │     │                 │
-                        │ Queue Consumer  │────▶│ Celery Worker   │
-                        │ (BLPOP Process) │     │ (Task Execution)│
+                        │  Worker Process │────▶│ External Service│
+                        │ (Task Execution)│     │ (e.g., LLM API) │
                         │                 │     │                 │
-                        └─────────────────┘     └────────┬────────┘
-                                                          │
-                        ┌─────────────────┐               │
-                        │                 │               │
-                        │ OpenRouter API  │◀──────────────┘
-                        │ (LLM Backend)   │
-                        │                 │
-                        └─────────────────┘
+                        └─────────────────┘     └─────────────────┘
 ```
 
-#### Step-by-Step Task Flow
+### Tech Stack
 
-**1. Task Creation (API Layer)**
-```http
-POST /api/v1/tasks/summarize/
-Content-Type: application/json
-{"content": "Text to summarize"}
-```
-- FastAPI receives the HTTP request
-- Creates task metadata in Redis: `task:{task_id}` with state "PENDING"
-- Pushes task ID to `tasks:pending:primary` Redis list
-- Returns task ID to client immediately
-- **No direct Celery interaction** - API is completely decoupled
+- **Backend**: Python, FastAPI
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS
+- **Task Queue**: Custom Redis-based implementation
+- **Infrastructure**: Docker, Docker Compose
+- **Package Management**: `uv` for Python, `pnpm` for Frontend
 
-**2. Task Consumption (Consumer Layer)**
-- Dedicated consumer process runs on each worker container
-- Uses Redis `BLPOP` operation to atomically pull task IDs from queues
-- Implements intelligent queue selection:
-  - 70% from `tasks:pending:primary` (new tasks)
-  - 30% from `tasks:pending:retry` (failed tasks)
-- Ratio adapts based on retry queue pressure
+### Key Components
 
-**3. Task Dispatch (Consumer → Celery)**
-- Consumer receives task ID from Redis queue
-- Updates task state to "ACTIVE" in Redis
-- Dispatches to local Celery worker: `celery_app.send_task("summarize_text", args=[task_id])`
-- Consumer continues listening for more tasks
+- **API Service**: A FastAPI application that exposes endpoints for task creation, management, and monitoring.
+- **Worker Service**: A pool of workers responsible for executing the actual tasks. They consume tasks directly from Redis queues.
+- **Frontend Application**: A React-based single-page application for real-time monitoring and management.
+- **Redis**: Acts as the message broker, task metadata store, and metrics database.
 
-**4. Task Execution (Celery Worker)**
-- Celery worker receives task from internal queue
-- Loads task metadata from Redis using task ID
-- Calls OpenRouter API with circuit breaker protection
-- Handles retries, errors, and state management
+### Data Flow & Task Lifecycle
 
-**5. LLM Processing (OpenRouter API)**
-- HTTP request to OpenRouter's chat completions endpoint
-- Uses configured model (default: `meta-llama/llama-3.2-90b-text-preview`)
-- Returns summarized text or error response
+1.  **Task Creation**: A client sends a request to the FastAPI `/api/v1/tasks/summarize/` endpoint.
+2.  **Metadata Storage**: The API creates a task hash in Redis (`task:{uuid}`), sets its state to `PENDING`, and increments the `metrics:tasks:state:pending` counter.
+3.  **Queueing**: The task ID is pushed to the `tasks:pending:primary` Redis list.
+4.  **Real-time Update**: A message is published to the `queue-updates` channel, which is streamed to the frontend.
+5.  **Consumption**: A worker process, listening with `BLPOP`, pulls a task ID from the `tasks:pending:primary` or `tasks:pending:retry` queue.
+6.  **Execution**: The worker updates the task state to `ACTIVE`, executes the task (e.g., calls an external LLM API), and handles the result.
+7.  **Completion**:
+    - **Success**: State is updated to `COMPLETED`, result is stored.
+    - **Failure**: State is updated to `FAILED`. If retries are available, it's moved to the `tasks:scheduled` queue for a delayed retry. If not, it's moved to the `dlq:tasks` queue.
+8.  **Monitoring**: Throughout the lifecycle, state counters are updated atomically, providing a consistent view of the system for the monitoring dashboard.
 
-**6. Task Completion**
-- On success: Updates task state to "COMPLETED" with result
-- On failure: Schedules retry or moves to dead letter queue
-- All state changes stored in Redis for API queries
+## 4. Prerequisites
 
-#### Queue Management
+- Docker and Docker Compose
+- A modern web browser (e.g., Chrome, Firefox)
+- `git` for cloning the repository
 
-The system maintains multiple specialized queues:
+## 5. Quick Start
 
-- **`tasks:pending:primary`**: New tasks from API
-- **`tasks:pending:retry`**: Failed tasks eligible for retry  
-- **`tasks:scheduled`**: Delayed retries (Redis sorted set)
-- **`dlq:tasks`**: Permanently failed tasks
+Get the application up and running in just a few commands.
 
-#### Monitoring Integration
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/rjalexa/fastapi-async.git
+    cd fastapi-async
+    ```
+2.  **Set up environment variables:**
+    ```bash
+    cp .env.example .env
+    # (Optional) Edit .env with your configuration, e.g., an OpenRouter API key.
+    ```
+3.  **Start all services:**
+    ```bash
+    docker compose up -d --build
+    ```
+4.  **Access the services:**
+    - **Frontend UI**: [http://localhost:5173](http://localhost:5173)
+    - **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-**Built-in API Monitoring:**
-```bash
-# Queue status and depths
-curl http://localhost:8000/api/v1/queues/status
+## 6. Usage
 
-# Worker health and performance
-curl http://localhost:8000/health/workers
+- **Create Tasks**: Use the API or utility scripts to create new tasks.
+- **Monitor System**: Open the Frontend UI to see real-time updates on queue depths, task states, and worker status.
+- **Manage Tasks**: Use the API to check task status, retry failed tasks, or delete them.
 
-# Dead letter queue analysis
-curl http://localhost:8000/api/v1/queues/dlq
+## 7. API Reference
 
-# Individual task tracking
-curl http://localhost:8000/api/v1/tasks/{task_id}
-```
+The API is divided into several logical groups.
 
-**Understanding Queue Status vs Task States:**
+### Health Checks
 
-The `/api/v1/queues/status` endpoint returns two distinct types of information:
-
-```json
-{
-  "queues": {
-    "primary": 0,
-    "retry": 0,
-    "scheduled": 0,
-    "dlq": 0
-  },
-  "states": {
-    "COMPLETED": 10,
-    "FAILED": 2
-  },
-  "retry_ratio": 0.3
-}
-```
-
-- **`queues`**: Shows the number of task IDs currently waiting in Redis lists/sets for processing. These are tasks that need some action (processing, retrying, etc.). When tasks complete successfully, they are removed from all queues, so completed tasks don't appear here.
-
-- **`states`**: Shows the count of all tasks by their current status, regardless of queue membership. This is calculated by scanning all `task:{task_id}` records in Redis and counting their `state` field values. Completed tasks remain in the system for result retrieval via the API.
-
-This design separates "work to be done" (queues) from "historical record keeping" (task states), allowing you to monitor both active workload and overall system activity.
-
-**Complete System Visibility:**
-- Real-time queue monitoring shows tasks waiting in custom Redis queues
-- Worker health endpoints provide performance metrics and circuit breaker status
-- Task lifecycle tracking from creation to completion
-- Comprehensive error analysis and retry management
-
-#### Architecture Benefits
-
-✅ **Horizontal Scalability**: Add workers and they automatically participate  
-✅ **Fault Tolerance**: Atomic operations prevent task loss  
-✅ **Queue Pressure Management**: Adaptive ratios prevent retry storms  
-✅ **Clean Separation**: API, queuing, and execution are decoupled  
-✅ **Sophisticated Retry Logic**: Primary/retry queue separation  
-✅ **Production Monitoring**: Dual monitoring approach provides complete visibility
-
-## API Endpoints
+- `GET /health`: Comprehensive system health check.
+- `GET /live`: Kubernetes-style liveness probe.
+- `GET /ready`: Kubernetes-style readiness probe.
 
 ### Task Creation (Application-Specific)
-- `POST /api/v1/tasks/summarize/` - Create a new text summarization task
 
-### Task Management (Generic)
-- `GET /api/v1/tasks/{task_id}` - Get task details and results (works for any task type)
-- `POST /api/v1/tasks/{task_id}/retry` - Manually retry a failed task (works for any task type)
-- `GET /api/v1/tasks/` - List tasks by status (works for any task type)
-- `POST /api/v1/tasks/requeue-orphaned` - Requeue orphaned tasks (works for any task type)
-- `DELETE /api/v1/tasks/{task_id}` - Delete a task (works for any task type)
+- `POST /api/v1/tasks/summarize/`: Create a new text summarization task.
 
-### Monitoring
-- `GET /health` - System health check
-- `GET /health/workers` - Worker health and circuit breaker status
-- `GET /api/v1/queues/status` - Queue status and metrics
+### Generic Task Management
 
-### Queue Management
-- `GET /api/v1/queues/dlq` - Dead letter queue contents
-- `POST /health/workers/reset-circuit-breaker` - Reset worker circuit breakers
+- `GET /api/v1/tasks/`: List tasks by status (e.g., `?status=COMPLETED`).
+- `GET /api/v1/tasks/{task_id}`: Get detailed information for a single task.
+- `POST /api/v1/tasks/{task_id}/retry`: Manually retry a failed or DLQ task.
+- `DELETE /api/v1/tasks/{task_id}`: Permanently delete a task and its data.
+- `POST /api/v1/tasks/requeue-orphaned`: Utility to find and requeue tasks that are in a `PENDING` state but not in any queue.
 
-## Configuration
+### Queue Monitoring & Management
 
-All configuration is managed through environment variables in the `.env` file. Key settings include:
+- `GET /api/v1/queues/status`: Get a snapshot of all queue depths and task state counts.
+- `GET /api/v1/queues/status/stream`: SSE endpoint for real-time monitoring updates.
+- `GET /api/v1/queues/{queue_name}/tasks`: List the top task IDs in a specific queue (`primary`, `retry`, `scheduled`, `dlq`).
+- `GET /api/v1/queues/dlq`: Get detailed information for tasks in the Dead Letter Queue.
 
-- **Redis**: Connection URLs and configuration
-- **OpenRouter**: API credentials and model settings
-- **Worker Performance**: Scaling and resource limits
-- **Circuit Breaker**: Failure thresholds and timeouts
-- **Monitoring**: Health check intervals and logging
+### Worker Management
 
-## Development
+- `GET /api/v1/workers/`: Get detailed health and circuit breaker status from all workers.
+- `POST /api/v1/workers/reset-circuit-breaker`: Reset the circuit breakers on all workers.
+- `POST /api/v1/workers/open-circuit-breaker`: Manually open all circuit breakers to halt task processing.
+
+## 8. Redis Data Structures
+
+The system relies on a set of well-defined Redis data structures for its operation.
+
+### Task Queues
+
+- **`tasks:pending:primary`** (List): FIFO queue for new tasks.
+- **`tasks:pending:retry`** (List): FIFO queue for tasks ready for immediate retry.
+- **`tasks:scheduled`** (Sorted Set): Tasks scheduled for a delayed retry, scored by their retry timestamp.
+- **`dlq:tasks`** (List): Dead Letter Queue for tasks that have exhausted all retries.
+
+### Task Metadata
+
+- **`task:{uuid}`** (Hash): Stores all information about a single task, including its content, state, retry count, and result. The `state` field can be one of:
+    - `PENDING`: Task is queued, waiting for a worker.
+    - `ACTIVE`: Task is currently being processed by a worker.
+    - `COMPLETED`: Task finished successfully.
+    - `FAILED`: Task failed, may be retried.
+    - `SCHEDULED`: Task is waiting for a delayed retry.
+    - `DLQ`: Task has failed permanently.
+- **`dlq:task:{uuid}`** (Hash): A copy of the task data when it enters the DLQ.
+
+### Monitoring & Metrics
+
+- **`metrics:tasks:state:{state}`** (String/Counter): A set of counters for each task state (e.g., `metrics:tasks:state:pending`). These are updated atomically and provide an efficient way to get system-wide state counts.
+- **`worker:heartbeat:{worker-id}`** (String): A key used by each worker to report its liveness.
+- **`queue-updates`** (Pub/Sub Channel): Used to broadcast real-time updates to the API for the SSE stream.
+
+## 9. Development
 
 ### Running Locally
+
 ```bash
-# Start development environment
+# Start all services in detached mode
 docker compose up -d
 
-# View logs
+# View logs for all services
 docker compose logs -f
 
-# Rebuild after changes
-docker compose build && docker compose up -d
+# View logs for a specific service (e.g., worker)
+docker compose logs -f worker
+
+# Rebuild images after code changes
+docker compose up -d --build
 ```
 
 ### System Reset
 
-During development, you may need to completely reset the system state by clearing all Redis data (queues, task metadata, etc.):
+To completely wipe all data in Redis (queues, tasks, metrics) during development, use the provided utility script.
+
+**⚠️ Warning**: This is a destructive operation and cannot be undone.
 
 ```bash
-# Reset Redis data using Docker Compose (recommended)
+# Run the reset script via Docker Compose
 docker compose run --rm reset --confirm
-
-# Or inspect current state first (without resetting)
-docker compose run --rm reset
-
-# Alternative: Run reset script directly (if Redis is accessible locally)
-python utils/reset_redis.py --confirm
 ```
 
-The reset utility will:
-- Show current Redis state (queue lengths, task counts, etc.)
-- Clear all Redis data using `FLUSHALL`
-- Confirm the reset was successful
+This command is safe to run as it's isolated within the `tools` profile in `docker-compose.yml` and requires explicit confirmation.
 
-#### Safety Features
+## 10. Performance Management
 
-**✅ The reset service is completely safe and will NEVER run automatically:**
+The system's performance can be tuned via environment variables in the `.env` file.
 
-- **Docker Compose Profiles**: The reset service uses the `tools` profile, which excludes it from normal operations
-- **Manual Only**: Only runs when explicitly requested with `docker compose run --rm reset`
-- **Double Confirmation**: Requires `--confirm` flag to actually perform the reset
-- **Inspection First**: Shows what will be deleted before proceeding
+- `WORKER_REPLICAS`: Number of worker containers to run.
+- `CELERY_WORKER_CONCURRENCY`: Number of tasks each worker can process concurrently.
+- `WORKER_PREFETCH_MULTIPLIER`: How many tasks a worker fetches at once.
+- `WORKER_MEMORY_LIMIT` / `WORKER_CPU_LIMIT`: Docker resource limits for worker containers.
+- `CELERY_TASK_TIME_LIMIT`: Hard timeout for task execution.
 
-**Normal operations are completely safe:**
-```bash
-# These commands will NOT run the reset service
-docker compose up -d          # Starts: redis, api, worker, scheduler, frontend
-docker compose up             # Same as above  
-docker compose restart        # Restarts services, no reset
-docker compose down           # Stops services, no reset
-```
+Refer to the `.env.example` file for a full list of tunable parameters and example profiles for different environments.
 
-**Reset only happens when explicitly requested:**
-```bash
-# Only these commands will run the reset service
-docker compose run --rm reset                    # Inspect only (safe)
-docker compose run --rm reset --confirm          # Actually reset (destructive)
-```
+## 11. Troubleshooting
 
-**⚠️ Warning**: The reset operation will permanently delete all tasks, queue data, and system state. Only use during development.
-
-### Viewing Redis Data
-
-You can inspect your Redis data using a Redis viewer (like the Redis for VS Code extension). When the system is active, you should see these key structures:
-
-**Queue Keys (Lists/Sets):**
-- `tasks:pending:primary` - New tasks waiting to be processed
-- `tasks:pending:retry` - Failed tasks waiting for retry
-- `tasks:scheduled` - Tasks scheduled for delayed retry (sorted set)
-- `dlq:tasks` - Dead letter queue for permanently failed tasks
-
-**Task Metadata (Hashes):**
-- `task:{uuid}` - Individual task data and state
-- `dlq:task:{uuid}` - Dead letter queue task metadata
-
-**Worker Data:**
-- `worker:heartbeat:{worker-id}` - Worker health heartbeats
-- `_kombu.binding.*` - Celery internal queues
-
-**Note**: Redis automatically removes empty lists and sets to save memory. If you don't see the queue keys, it means they're currently empty. Create some tasks to see them appear:
-
-```bash
-# Create a test task to populate queues
-curl -X POST http://localhost:8000/api/v1/tasks/summarize/ \
-  -H "Content-Type: application/json" \
-  -d '{"content": "This is a test document to summarize."}'
-
-# Check queue status via API
-curl http://localhost:8000/api/v1/queues/status
-```
-
-### Testing
-```bash
-# Run tests (when available)
-docker compose exec api python -m pytest
-
-# Manual API testing
-curl -X POST http://localhost:8000/api/v1/tasks/summarize/ \
-  -H "Content-Type: application/json" \
-  -d '{"content": "This is a test document to summarize."}'
-```
-
-## Production Deployment
-
-1. **Environment Setup**: Configure production values in `.env`
-2. **Resource Planning**: Set appropriate worker counts and resource limits
-3. **Monitoring**: Set up log aggregation and alerting
-4. **Backup**: Configure Redis persistence if needed
-5. **Security**: Configure proper network security and API authentication
-
-## License
-
-[Add your license information here]
+- **Tasks are stuck in `PENDING`**:
+    - Check worker logs: `docker compose logs -f worker`.
+    - Ensure workers are running and healthy: `curl http://localhost:8000/api/v1/workers/`.
+    - Check if circuit breakers are open. If so, reset them after fixing the underlying issue.
+- **High memory usage**:
+    - Reduce `CELERY_WORKER_CONCURRENCY`.
+    - Set `WORKER_MAX_TASKS_PER_CHILD` to a reasonable number (e.g., 1000) to periodically restart worker processes.
+- **Dashboard counters seem incorrect**:
+    - Run the counter sync utility: `docker compose run --rm api python utils/fix_counter_sync.py`.
