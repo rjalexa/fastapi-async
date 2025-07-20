@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { fetchTasks } from '@/lib/tasks-api';
 import { TaskDetail, TaskListResponse, TaskState, QueueName } from '@/lib/types';
@@ -32,6 +32,12 @@ const TasksHistory: React.FC = () => {
       if (filters.status === 'all' || filters.status === '') {
         filterParams.status = undefined;
       }
+      // Only send task_id if it has at least 1 character
+      if (filters.task_id && filters.task_id.trim().length > 0) {
+        filterParams.task_id = filters.task_id.trim();
+      } else {
+        filterParams.task_id = undefined;
+      }
       const data = await fetchTasks(filterParams);
       setTasksResponse(data);
     } catch (err: unknown) {
@@ -57,6 +63,11 @@ const TasksHistory: React.FC = () => {
   const handlePageChange = (newPage: number) => {
     setFilters((prev) => ({ ...prev, page: newPage }));
   };
+
+  // Check if pagination should be shown
+  const shouldShowPagination = useMemo(() => {
+    return tasksResponse && tasksResponse.total_pages > 1;
+  }, [tasksResponse]);
 
   const renderStateBadge = (state: TaskState) => {
     const colorMap: { [key in TaskState]: string } = {
@@ -84,10 +95,10 @@ const TasksHistory: React.FC = () => {
           value={filters.status}
           onValueChange={(value: string) => handleFilterChange('status', value)}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px] bg-white border border-gray-300">
             <SelectValue placeholder="Filter by Status" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-white border border-gray-300 shadow-lg">
             <SelectItem value="all">All Statuses</SelectItem>
             {Object.values(TaskState).map((state) => (
               <SelectItem key={state} value={state}>
@@ -96,7 +107,6 @@ const TasksHistory: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={loadTasks}>Search</Button>
       </div>
 
       {loading && <p>Loading...</p>}
@@ -117,7 +127,7 @@ const TasksHistory: React.FC = () => {
             <TableBody>
               {tasksResponse.tasks.map((task: TaskDetail) => (
                 <TableRow key={task.task_id}>
-                  <TableCell className="font-mono">{task.task_id.substring(0, 12)}...</TableCell>
+                  <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
                   <TableCell>{renderStateBadge(task.state)}</TableCell>
                   <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
                   <TableCell>
@@ -130,13 +140,13 @@ const TasksHistory: React.FC = () => {
                       <SheetTrigger asChild>
                         <Button variant="outline" size="sm">View Details</Button>
                       </SheetTrigger>
-                      <SheetContent className="w-[600px] sm:w-[800px]">
+                      <SheetContent className="w-[600px] sm:w-[800px] max-w-[90vw] overflow-y-auto">
                         <SheetHeader>
                           <SheetTitle>Task Details: {task.task_id}</SheetTitle>
                         </SheetHeader>
                         <div className="py-4 space-y-4">
-                          <div><strong>Content:</strong><pre className="bg-gray-100 p-2 rounded-md">{task.content}</pre></div>
-                          <div><strong>Result:</strong><pre className="bg-gray-100 p-2 rounded-md">{task.result || 'N/A'}</pre></div>
+                          <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
+                          <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>
                           <h3 className="font-bold mt-4">State History</h3>
                           <Table>
                             <TableHeader>
@@ -166,20 +176,22 @@ const TasksHistory: React.FC = () => {
             <p className="text-sm text-gray-600">
               Showing page {tasksResponse.page} of {tasksResponse.total_pages}
             </p>
-            <div className="flex items-center space-x-2">
-              <Button
-                onClick={() => handlePageChange(filters.page - 1)}
-                disabled={filters.page <= 1}
-              >
-                Previous
-              </Button>
-              <Button
-                onClick={() => handlePageChange(filters.page + 1)}
-                disabled={filters.page >= tasksResponse.total_pages}
-              >
-                Next
-              </Button>
-            </div>
+            {shouldShowPagination && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  onClick={() => handlePageChange(filters.page - 1)}
+                  disabled={filters.page <= 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  onClick={() => handlePageChange(filters.page + 1)}
+                  disabled={filters.page >= tasksResponse.total_pages}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </div>
         </>
       )}

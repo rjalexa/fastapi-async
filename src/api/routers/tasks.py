@@ -32,7 +32,7 @@ def get_task_service() -> TaskService:
 
 @router.get("/", response_model=TaskListResponse)
 async def list_tasks(
-    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
     queue: Optional[QueueName] = Query(None, description="Filter tasks by queue"),
     start_date: Optional[datetime] = Query(None, description="Start date for filtering"),
     end_date: Optional[datetime] = Query(None, description="End date for filtering"),
@@ -48,7 +48,7 @@ async def list_tasks(
     """
     try:
         result = await task_svc.list_tasks(
-            status=task_status,
+            status=status,
             queue=queue,
             start_date=start_date,
             end_date=end_date,

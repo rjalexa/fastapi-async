@@ -300,21 +300,135 @@ class TaskService:
         task_id: Optional[str] = None,
     ) -> TaskListResponse:
         """List tasks with filtering, sorting, and pagination."""
+        # If task_id is provided, do substring search instead of exact match
         if task_id:
-            task = await self.get_task(task_id)
-            if task:
+            # First try exact match for backward compatibility
+            exact_task = await self.get_task(task_id)
+            if exact_task:
                 return TaskListResponse(
-                    tasks=[task],
+                    tasks=[exact_task],
                     page=1,
                     page_size=1,
                     total_items=1,
                     total_pages=1,
-                    status=task.state,
+                    status=exact_task.state,
                 )
-            else:
+            
+            # If no exact match, do substring search
+            all_tasks = []
+            async for key in self.redis.scan_iter("task:*"):
+                task_data = await self.redis.hgetall(key)
+                if task_data and task_id.lower() in task_data.get("task_id", "").lower():
+                    all_tasks.append(task_data)
+            
+            if not all_tasks:
                 return TaskListResponse(
                     tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0
                 )
+            
+            # Apply other filters to substring matches
+            filtered_tasks = []
+            for task_data in all_tasks:
+                if status and task_data.get("state") != status.value:
+                    continue
+                
+                # Safely parse created_at field
+                try:
+                    created_at_str = task_data.get("created_at")
+                    if created_at_str:
+                        created_at = datetime.fromisoformat(created_at_str)
+                        if start_date and created_at < start_date:
+                            continue
+                        if end_date and created_at > end_date:
+                            continue
+                except (ValueError, TypeError):
+                    # Skip tasks with invalid created_at format
+                    continue
+
+                filtered_tasks.append(task_data)
+            
+            # Sort and paginate the substring matches
+            reverse = sort_order.lower() == "desc"
+            
+            def sort_key_func(task_data):
+                val = task_data.get(sort_by)
+                if val is None:
+                    if sort_by in ["created_at", "updated_at", "completed_at"]:
+                        return datetime.min if not reverse else datetime.max
+                    elif sort_by in ["retry_count", "max_retries"]:
+                        return 0
+                    else:
+                        return ""
+                
+                if isinstance(val, str) and val.isdigit():
+                    return int(val)
+                if isinstance(val, str):
+                    try:
+                        return datetime.fromisoformat(val)
+                    except ValueError:
+                        return val
+                return val
+
+            try:
+                filtered_tasks.sort(key=sort_key_func, reverse=reverse)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Invalid sort key '{sort_by}': {e}")
+
+            # Pagination for substring matches
+            total_items = len(filtered_tasks)
+            total_pages = math.ceil(total_items / page_size)
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_data = filtered_tasks[start_index:end_index]
+
+            tasks = []
+            for task_data in paginated_data:
+                try:
+                    error_history = json.loads(task_data.get("error_history", "[]"))
+                    state_history = json.loads(task_data.get("state_history", "[]"))
+                    
+                    created_at = datetime.fromisoformat(task_data["created_at"])
+                    updated_at = datetime.fromisoformat(task_data["updated_at"])
+                    completed_at = (
+                        datetime.fromisoformat(task_data["completed_at"])
+                        if task_data.get("completed_at")
+                        else None
+                    )
+                    retry_after = (
+                        datetime.fromisoformat(task_data["retry_after"])
+                        if task_data.get("retry_after")
+                        else None
+                    )
+                    
+                    tasks.append(
+                        TaskDetail(
+                            task_id=task_data["task_id"],
+                            state=TaskState(task_data["state"]),
+                            content=task_data["content"],
+                            retry_count=int(task_data["retry_count"]),
+                            max_retries=int(task_data["max_retries"]),
+                            last_error=task_data.get("last_error") or None,
+                            error_type=task_data.get("error_type") or None,
+                            retry_after=retry_after,
+                            created_at=created_at,
+                            updated_at=updated_at,
+                            completed_at=completed_at,
+                            result=task_data.get("result") or None,
+                            error_history=error_history,
+                            state_history=state_history,
+                        )
+                    )
+                except (ValueError, TypeError, KeyError) as e:
+                    continue
+
+            return TaskListResponse(
+                tasks=tasks,
+                page=page,
+                page_size=page_size,
+                total_items=total_items,
+                total_pages=total_pages,
+                status=status,
+            )
 
         all_tasks = []
         async for key in self.redis.scan_iter("task:*"):

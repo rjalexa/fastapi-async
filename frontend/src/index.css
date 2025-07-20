@@ -8,9 +8,9 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: light;
+  color: #1f2937;
+  background-color: #f9fafb;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -21,8 +21,6 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
@@ -31,5 +29,45 @@ body {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
-  text-align: center;
+}
+
+/* Ensure proper modal/sheet positioning */
+[data-radix-portal] {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  pointer-events: none !important;
+}
+
+[data-radix-portal] > * {
+  pointer-events: auto !important;
+}
+
+/* Fix for sheet content positioning */
+[data-radix-dialog-content] {
+  position: fixed !important;
+  z-index: 51 !important;
+}
+
+/* Ensure overlay covers the entire viewport */
+[data-radix-dialog-overlay] {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 50 !important;
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Reset any transform that might interfere with positioning */
+[data-radix-dialog-content] {
+  transform: none !important;
+}
+
+/* Ensure the sheet slides in from the right properly */
+[data-radix-dialog-content][data-side="right"] {
+  right: 0 !important;
+  top: 0 !important;
+  height: 100vh !important;
 }
