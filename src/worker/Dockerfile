@@ -21,6 +21,7 @@ RUN apt-get update && \
     build-essential \
     curl \
     procps \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
