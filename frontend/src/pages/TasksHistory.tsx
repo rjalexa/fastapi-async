@@ -80,6 +80,29 @@ const TasksHistory: React.FC = () => {
     return <Badge className={`${colorMap[state]} text-white border`}>{state}</Badge>;
   };
 
+  const getTaskType = (): string => {
+    // For now, all tasks are summarize tasks since only summarize endpoint is implemented
+    // When pdfxtract is implemented, this logic can be enhanced to determine task type
+    // based on task content, metadata, or API endpoint used
+    return 'summarize';
+  };
+
+  const renderTaskTypeBadge = (taskType: string) => {
+    const colorMap: { [key: string]: string } = {
+      'summarize': 'bg-blue-500 border-blue-600',
+      'pdfxtract': 'bg-purple-500 border-purple-600',
+    };
+    return <Badge className={`${colorMap[taskType] || 'bg-gray-500 border-gray-600'} text-white border`}>{taskType}</Badge>;
+  };
+
+  const calculateDuration = (task: TaskDetail): string => {
+    if (task.completed_at) {
+      const duration = (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000;
+      return `${duration}s`;
+    }
+    return 'N/A';
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Tasks History</h1>
@@ -118,8 +141,8 @@ const TasksHistory: React.FC = () => {
               <TableRow>
                 <TableHead>Task ID</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Task Type</TableHead>
                 <TableHead>Created At</TableHead>
-                <TableHead>Duration</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -128,12 +151,8 @@ const TasksHistory: React.FC = () => {
                 <TableRow key={task.task_id}>
                   <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
                   <TableCell>{renderStateBadge(task.state)}</TableCell>
+                  <TableCell>{renderTaskTypeBadge(getTaskType())}</TableCell>
                   <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
-                  <TableCell>
-                    {task.completed_at
-                      ? `${(new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000}s`
-                      : 'N/A'}
-                  </TableCell>
                   <TableCell>
                     <Sheet>
                       <SheetTrigger asChild>
@@ -144,6 +163,8 @@ const TasksHistory: React.FC = () => {
                           <SheetTitle>Task Details: {task.task_id}</SheetTitle>
                         </SheetHeader>
                         <div className="py-4 space-y-4">
+                          <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType())}</div>
+                          <div><strong>Duration:</strong> {calculateDuration(task)}</div>
                           <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
                           <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>
                           <h3 className="font-bold mt-4">State History</h3>
