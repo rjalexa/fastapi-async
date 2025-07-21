@@ -15,6 +15,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { QueueStatus } from '../../lib/api';
+import { nodeTypes } from './CustomNodes';
 
 interface TaskFlowGraphProps {
   queueStatus: QueueStatus | null;
@@ -80,12 +81,12 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
     }
   }, [navigate, getNodeCount]);
 
-  // Define the initial nodes based on the task flow - shifted left to prevent truncation
+  // Define the initial nodes based on the task flow - updated layout with custom nodes
   const initialNodes: Node[] = useMemo(() => [
     {
       id: 'submit',
       type: 'input',
-      position: { x: 250, y: 50 },
+      position: { x: 330, y: 50 },
       data: { 
         label: (
           <div className="text-center text-gray-800">
@@ -93,172 +94,136 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
           </div>
         )
       },
-      className: 'bg-blue-100 border-2 border-blue-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900'
+      className: 'bg-blue-100 border-2 border-blue-600 rounded-lg p-3 w-[140px] h-[80px] flex flex-col justify-center text-center text-gray-900'
     },
     {
       id: 'primary-queue',
-      position: { x: 250, y: 150 },
+      type: 'primaryQueueNode',
+      position: { x: 330, y: 150 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Primary</div>
-            <div className="text-lg font-bold">{queueStatus?.queues.primary || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('primary-queue') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
-      }`
+        count: queueStatus?.queues.primary || 0
+      }
     },
     {
       id: 'processing',
-      position: { x: 350, y: 250 },
+      type: 'activeNode',
+      position: { x: 330, y: 250 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Active</div>
-            <div className="text-lg font-bold">{queueStatus?.states.ACTIVE || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('processing') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
-      }`
+        count: queueStatus?.states.ACTIVE || 0
+      }
     },
     {
       id: 'completed',
-      type: 'output',
-      position: { x: 155, y: 350 },
+      type: 'completedNode',
+      position: { x: 100, y: 250 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Completed</div>
-            <div className="text-lg font-bold">{queueStatus?.states.COMPLETED || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-green-100 border-2 border-green-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('completed') > 0 ? 'cursor-pointer hover:bg-green-200' : ''
-      }`
+        count: queueStatus?.states.COMPLETED || 0
+      }
     },
     {
       id: 'failed',
-      position: { x: 545, y: 350 },
+      type: 'failedNode',
+      position: { x: 560, y: 250 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Failed</div>
-            <div className="text-lg font-bold">{queueStatus?.states.FAILED || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('failed') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
-      }`
-    },
-    {
-      id: 'scheduled-queue',
-      position: { x: 465, y: 470 },
-      data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Scheduled</div>
-            <div className="text-lg font-bold">{queueStatus?.queues.scheduled || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('scheduled-queue') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
-      }`
+        count: queueStatus?.states.FAILED || 0
+      }
     },
     {
       id: 'dlq',
-      type: 'output',
-      position: { x: 625, y: 470 },
+      type: 'deadLetterNode',
+      position: { x: 790, y: 250 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Dead Letter</div>
-            <div className="text-lg font-bold">{queueStatus?.queues.dlq || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-red-100 border-2 border-red-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('dlq') > 0 ? 'cursor-pointer hover:bg-red-200' : ''
-      }`
+        count: queueStatus?.queues.dlq || 0
+      }
+    },
+    {
+      id: 'scheduled-queue',
+      type: 'scheduledQueueNode',
+      position: { x: 560, y: 400 },
+      data: { 
+        count: queueStatus?.queues.scheduled || 0
+      }
     },
     {
       id: 'retry-queue',
-      position: { x: 350, y: 570 },
+      type: 'retryNode',
+      position: { x: 330, y: 400 },
       data: { 
-        label: (
-          <div className="text-center text-gray-800">
-            <div className="font-semibold">Retry</div>
-            <div className="text-lg font-bold">{queueStatus?.queues.retry || 0}</div>
-          </div>
-        )
-      },
-      className: `bg-yellow-100 border-2 border-yellow-600 rounded-lg p-2.5 min-w-[120px] text-center text-gray-900 transition-colors ${
-        getNodeCount('retry-queue') > 0 ? 'cursor-pointer hover:bg-yellow-200' : ''
-      }`
+        count: queueStatus?.queues.retry || 0
+      }
     }
-  ], [queueStatus, getNodeCount]);
+  ], [queueStatus]);
 
-  // Define the edges (connections between nodes) - matching the exact layout from the image
+  // Define the edges (connections between nodes) - updated with custom handles
   const initialEdges: Edge[] = useMemo(() => [
     {
       id: 'submit-primary',
       source: 'submit',
       target: 'primary-queue',
+      targetHandle: 'top-target',
       animated: true,
       style: { stroke: '#1976d2', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'primary-processing',
       source: 'primary-queue',
+      sourceHandle: 'bottom-source',
       target: 'processing',
+      targetHandle: 'top-target',
       animated: true,
       style: { stroke: '#16a34a', strokeWidth: 2 }
     },
     {
       id: 'processing-completed',
       source: 'processing',
+      sourceHandle: 'left-source',
       target: 'completed',
+      targetHandle: 'right-target',
       animated: true,
-      style: { stroke: '#16a34a', strokeWidth: 2, strokeDasharray: '5,5' }
+      style: { stroke: '#16a34a', strokeWidth: 2 }
     },
     {
       id: 'processing-failed',
       source: 'processing',
+      sourceHandle: 'right-source',
       target: 'failed',
+      targetHandle: 'left-target',
       animated: true,
       style: { stroke: '#ca8a04', strokeWidth: 2 }
     },
     {
       id: 'failed-scheduled',
       source: 'failed',
+      sourceHandle: 'bottom-source',
       target: 'scheduled-queue',
+      targetHandle: 'top-target',
       animated: true,
       style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'failed-dlq',
       source: 'failed',
+      sourceHandle: 'right-source',
       target: 'dlq',
+      targetHandle: 'left-target',
       animated: true,
       style: { stroke: '#dc2626', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'scheduled-retry',
       source: 'scheduled-queue',
+      sourceHandle: 'left-source',
       target: 'retry-queue',
+      targetHandle: 'right-target',
       animated: true,
       style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     },
     {
       id: 'retry-processing',
       source: 'retry-queue',
+      sourceHandle: 'top-source',
       target: 'processing',
+      targetHandle: 'bottom-target',
       animated: true,
       style: { stroke: '#ca8a04', strokeWidth: 2, strokeDasharray: '5,5' }
     }
@@ -282,6 +247,7 @@ const TaskFlowGraph: React.FC<TaskFlowGraphProps> = ({ queueStatus }) => {
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
