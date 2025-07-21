@@ -1,24 +1,27 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchTasks, deleteTask } from '@/lib/tasks-api';
-import { TaskDetail, TaskListResponse, TaskState } from '@/lib/types';
+import { fetchTaskSummaries, fetchTaskDetail, deleteTask } from '@/lib/tasks-api';
+import { TaskSummary, TaskSummaryListResponse, TaskDetail, TaskState } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const TasksHistory: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tasksResponse, setTasksResponse] = useState<TaskListResponse | null>(null);
+  const [tasksResponse, setTasksResponse] = useState<TaskSummaryListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [taskToDelete, setTaskToDelete] = useState<TaskDetail | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<TaskSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [expandedTaskDetail, setExpandedTaskDetail] = useState<TaskDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   const [filters, setFilters] = useState({
     task_id: searchParams.get('task_id') || '',
@@ -51,7 +54,7 @@ const TasksHistory: React.FC = () => {
       } else {
         filterParams.task_id = undefined;
       }
-      const data = await fetchTasks(filterParams);
+      const data = await fetchTaskSummaries(filterParams);
       setTasksResponse(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -94,7 +97,7 @@ const TasksHistory: React.FC = () => {
     return <Badge className={`${colorMap[state]} text-white border`}>{state}</Badge>;
   };
 
-  const getTaskType = (task: TaskDetail): string => {
+  const getTaskType = (task: TaskSummary): string => {
     // Return the task_type from the backend, which should handle the fallback logic
     return task.task_type || 'summarize';
   };
@@ -107,7 +110,7 @@ const TasksHistory: React.FC = () => {
     return <Badge className={`${colorMap[taskType] || 'bg-gray-500 border-gray-600'} text-white border`}>{taskType}</Badge>;
   };
 
-  const calculateDuration = (task: TaskDetail): string => {
+  const calculateDuration = (task: TaskSummary | TaskDetail): string => {
     if (task.completed_at) {
       const duration = (new Date(task.completed_at).getTime() - new Date(task.created_at).getTime()) / 1000;
       return `${duration}s`;
@@ -115,7 +118,7 @@ const TasksHistory: React.FC = () => {
     return 'N/A';
   };
 
-  const handleDeleteClick = (task: TaskDetail) => {
+  const handleDeleteClick = (task: TaskSummary) => {
     setTaskToDelete(task);
     setDeleteModalOpen(true);
   };
@@ -140,6 +143,159 @@ const TasksHistory: React.FC = () => {
   const handleDeleteCancel = () => {
     setDeleteModalOpen(false);
     setTaskToDelete(null);
+  };
+
+  const toggleTaskDetails = async (taskId: string) => {
+    if (expandedTaskId === taskId) {
+      // Collapse
+      setExpandedTaskId(null);
+      setExpandedTaskDetail(null);
+    } else {
+      // Expand
+      setExpandedTaskId(taskId);
+      setLoadingDetail(true);
+      try {
+        const detail = await fetchTaskDetail(taskId);
+        setExpandedTaskDetail(detail);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch task details');
+      } finally {
+        setLoadingDetail(false);
+      }
+    }
+  };
+
+  const collapseTaskDetails = () => {
+    setExpandedTaskId(null);
+    setExpandedTaskDetail(null);
+  };
+
+  const renderTaskDetailsCard = (task: TaskSummary) => {
+    if (expandedTaskId !== task.task_id) return null;
+
+    return (
+      <TableRow>
+        <TableCell colSpan={5} className="p-0">
+          <div className="bg-gray-50 border-t border-gray-200 p-6 space-y-6">
+            {/* Header with Collapse Button */}
+            <div className="flex justify-between items-center pb-4 border-b border-gray-200">
+              <h4 className="font-semibold text-gray-700 text-lg">Task Details</h4>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={collapseTaskDetails}
+                className="flex items-center space-x-1"
+              >
+                <ChevronUp className="h-4 w-4" />
+                <span>Collapse</span>
+              </Button>
+            </div>
+
+            {loadingDetail ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Loading task details...</p>
+              </div>
+            ) : expandedTaskDetail ? (
+              <>
+                {/* Metadata Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-4 border-b border-gray-200">
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Timing Information</h5>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Created:</span> {format(new Date(expandedTaskDetail.created_at), 'PPpp')}</div>
+                      <div><span className="font-medium">Updated:</span> {format(new Date(expandedTaskDetail.updated_at), 'PPpp')}</div>
+                      {expandedTaskDetail.completed_at && (
+                        <div><span className="font-medium">Completed:</span> {format(new Date(expandedTaskDetail.completed_at), 'PPpp')}</div>
+                      )}
+                      <div><span className="font-medium">Duration:</span> {calculateDuration(expandedTaskDetail)}</div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Retry Information</h5>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Retry Count:</span> {expandedTaskDetail.retry_count} / {expandedTaskDetail.max_retries}</div>
+                      {expandedTaskDetail.retry_after && (
+                        <div><span className="font-medium">Retry After:</span> {format(new Date(expandedTaskDetail.retry_after), 'PPpp')}</div>
+                      )}
+                      {expandedTaskDetail.last_error && (
+                        <div><span className="font-medium">Last Error:</span> <span className="text-red-600 text-xs">{expandedTaskDetail.last_error}</span></div>
+                      )}
+                      {expandedTaskDetail.error_type && (
+                        <div><span className="font-medium">Error Type:</span> <span className="text-red-600 text-xs">{expandedTaskDetail.error_type}</span></div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Content Information</h5>
+                    <div className="space-y-2 text-sm">
+                      <div><span className="font-medium">Content Length:</span> {expandedTaskDetail.content?.length || 0} characters</div>
+                      <div><span className="font-medium">Has Result:</span> {expandedTaskDetail.result ? 'Yes' : 'No'}</div>
+                      {expandedTaskDetail.result && (
+                        <div><span className="font-medium">Result Length:</span> {expandedTaskDetail.result.length} characters</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* State History */}
+                <div>
+                  <h5 className="font-semibold text-gray-700 mb-3">State Transition History</h5>
+                  <div className="bg-white border border-gray-200 rounded-md p-4 max-h-48 overflow-y-auto">
+                    <div className="space-y-2">
+                      {expandedTaskDetail.state_history.map((entry, index) => (
+                        <div key={index} className="flex items-center justify-between py-1 border-b border-gray-100 last:border-b-0">
+                          <div className="flex items-center space-x-2">
+                            {renderStateBadge(entry.state)}
+                          </div>
+                          <span className="text-sm text-gray-600">
+                            {format(new Date(entry.timestamp), 'PPpp')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error History */}
+                {expandedTaskDetail.error_history && expandedTaskDetail.error_history.length > 0 && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Error History</h5>
+                    <div className="bg-white border border-gray-200 rounded-md p-4 max-h-48 overflow-y-auto">
+                      <div className="space-y-3">
+                        {expandedTaskDetail.error_history.map((error, index) => (
+                          <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md">
+                            <div className="text-sm">
+                              <div className="font-medium text-red-800">Error #{index + 1}</div>
+                              <pre className="text-xs text-red-700 mt-1 whitespace-pre-wrap">{JSON.stringify(error, null, 2)}</pre>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Result Section - Only for completed tasks */}
+                {expandedTaskDetail.state === TaskState.COMPLETED && expandedTaskDetail.result && (
+                  <div>
+                    <h5 className="font-semibold text-gray-700 mb-3">Task Result</h5>
+                    <div className="bg-white border border-gray-200 rounded-md p-4 max-h-64 overflow-y-auto">
+                      <pre className="text-sm whitespace-pre-wrap text-gray-800">{expandedTaskDetail.result}</pre>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-red-500">Failed to load task details</p>
+              </div>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    );
   };
 
   return (
@@ -199,58 +355,46 @@ const TasksHistory: React.FC = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tasksResponse.tasks.map((task: TaskDetail) => (
-                <TableRow key={task.task_id}>
-                  <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
-                  <TableCell>{renderStateBadge(task.state)}</TableCell>
-                  <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
-                  <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Sheet>
-                        <SheetTrigger asChild>
-                          <Button variant="outline" size="sm">View Details</Button>
-                        </SheetTrigger>
-                        <SheetContent className="w-[600px] sm:w-[800px] max-w-[90vw] overflow-y-auto">
-                          <SheetHeader>
-                            <SheetTitle>Task Details: {task.task_id}</SheetTitle>
-                          </SheetHeader>
-                          <div className="py-4 space-y-4">
-                            <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType(task))}</div>
-                            <div><strong>Duration:</strong> {calculateDuration(task)}</div>
-                            <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
-                            <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>
-                            <h3 className="font-bold mt-4">State History</h3>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>State</TableHead>
-                                  <TableHead>Timestamp</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {task.state_history.map((entry, index) => (
-                                  <TableRow key={index}>
-                                    <TableCell>{renderStateBadge(entry.state)}</TableCell>
-                                    <TableCell>{format(new Date(entry.timestamp), 'PPpp')}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </SheetContent>
-                      </Sheet>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleDeleteClick(task)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 hover:border-red-400"
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {tasksResponse.tasks.map((task: TaskSummary) => (
+                <React.Fragment key={task.task_id}>
+                  <TableRow className={expandedTaskId === task.task_id ? 'bg-blue-50' : ''}>
+                    <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
+                    <TableCell>{renderStateBadge(task.state)}</TableCell>
+                    <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
+                    <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => toggleTaskDetails(task.task_id)}
+                          className="flex items-center space-x-1"
+                        >
+                          {expandedTaskId === task.task_id ? (
+                            <>
+                              <ChevronUp className="h-4 w-4" />
+                              <span>Hide Details</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-4 w-4" />
+                              <span>View Details</span>
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleDeleteClick(task)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 hover:border-red-400"
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {renderTaskDetailsCard(task)}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>

@@ -44,7 +44,7 @@ def get_task_service() -> TaskService:
     "/", response_model=TaskListResponse, summary="List Tasks with FULL payloads"
 )
 async def list_tasks(
-    status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
     task_type: Optional[TaskType] = Query(
         None, description="Filter tasks by type (summarize or pdfxtract)"
     ),
@@ -65,7 +65,7 @@ async def list_tasks(
     """
     try:
         result = await task_svc.list_tasks(
-            status=status,
+            status=task_status,
             task_type=task_type,
             queue=queue,
             start_date=start_date,
@@ -88,7 +88,7 @@ async def list_tasks(
 
 @router.get("/summaries/", response_model=TaskSummaryListResponse)
 async def list_task_summaries(
-    status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
     task_type: Optional[TaskType] = Query(
         None, description="Filter tasks by type (summarize or pdfxtract)"
     ),
@@ -114,7 +114,7 @@ async def list_task_summaries(
     """
     try:
         result = await task_svc.list_task_summaries(
-            status=status,
+            status=task_status,
             task_type=task_type,
             queue=queue,
             start_date=start_date,
