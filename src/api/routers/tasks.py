@@ -240,20 +240,12 @@ async def delete_task(
     Works for tasks of any type (summarization, entity detection, etc.).
     """
     try:
-        # Check if task exists first
-        task = await task_svc.get_task(task_id)
-        if not task:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
-            )
-
-        # Delete the task
+        # Try to delete the task directly - the delete_task method handles existence checks
         success = await task_svc.delete_task(task_id)
 
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete task",
+                status_code=status.HTTP_404_NOT_FOUND, detail="Task not found"
             )
 
         return TaskDeleteResponse(

@@ -376,6 +376,13 @@ class TaskService:
     async def delete_task(self, task_id: str) -> bool:
         """Delete a task and all its associated data from the system."""
         try:
+            # First, get the task's current state to update counters
+            task_data = await self.redis.hgetall(f"task:{task_id}")
+            if not task_data:
+                return False  # Task doesn't exist
+            
+            current_state = task_data.get("state")
+            
             # Use Redis transaction to ensure atomicity
             async with self.redis.pipeline(transaction=True) as pipe:
                 # Delete the main task hash
@@ -392,11 +399,35 @@ class TaskService:
                 # Remove the task_id from the scheduled sorted set
                 await pipe.zrem(QUEUE_KEY_MAP[QueueName.SCHEDULED], task_id)
 
+                # Decrement the state counter for the task's current state
+                if current_state:
+                    await pipe.decrby(f"metrics:tasks:state:{current_state.lower()}", 1)
+
                 await pipe.execute()
 
             return True
-        except Exception:
-            return False
+        except Exception as e:
+            # If there's an error getting task data but we know the task exists,
+            # try to delete it anyway without updating counters
+            try:
+                # Check if task exists in Redis at all
+                exists = await self.redis.exists(f"task:{task_id}")
+                if not exists:
+                    return False
+                
+                # Force delete without counter updates for corrupted tasks
+                async with self.redis.pipeline(transaction=True) as pipe:
+                    await pipe.delete(f"task:{task_id}")
+                    await pipe.delete(f"dlq:task:{task_id}")
+                    await pipe.lrem(QUEUE_KEY_MAP[QueueName.PRIMARY], 0, task_id)
+                    await pipe.lrem(QUEUE_KEY_MAP[QueueName.RETRY], 0, task_id)
+                    await pipe.lrem(QUEUE_KEY_MAP[QueueName.DLQ], 0, task_id)
+                    await pipe.zrem(QUEUE_KEY_MAP[QueueName.SCHEDULED], task_id)
+                    await pipe.execute()
+                
+                return True
+            except Exception:
+                return False
 
     async def list_tasks(
         self,

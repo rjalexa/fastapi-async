@@ -12,12 +12,13 @@ import redis.asyncio as aioredis
 from schemas import QueueStatus, TaskDetail, QueueName
 from services import queue_service
 from config import settings
+from fastapi import Request
 
 router = APIRouter(prefix="/api/v1/queues", tags=["queues"])
 
 
 @router.get("/status", response_model=QueueStatus)
-async def get_queue_status() -> QueueStatus:
+async def get_queue_status(request: Request) -> QueueStatus:
     """
     Get comprehensive queue status and statistics.
 
@@ -26,7 +27,14 @@ async def get_queue_status() -> QueueStatus:
     - Task counts by state
     - Current adaptive retry ratio
     """
-    if not queue_service:
+    # Try to get the queue service from app state first
+    current_queue_service = getattr(request.app.state, 'queue_service', None)
+    
+    # Fallback to global variable
+    if not current_queue_service:
+        current_queue_service = queue_service
+    
+    if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
         from config import settings
@@ -34,6 +42,7 @@ async def get_queue_status() -> QueueStatus:
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
+            await temp_redis.initialize()
             temp_queue_service = QueueService(temp_redis)
             result = await temp_queue_service.get_queue_status()
             await temp_redis.close()
@@ -45,7 +54,7 @@ async def get_queue_status() -> QueueStatus:
             )
 
     try:
-        return await queue_service.get_queue_status()
+        return await current_queue_service.get_queue_status()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -55,6 +64,7 @@ async def get_queue_status() -> QueueStatus:
 
 @router.get("/{queue_name}/tasks", response_model=List[str])
 async def get_tasks_in_queue(
+    request: Request,
     queue_name: QueueName,
     limit: int = Query(
         default=10, ge=1, le=1000, description="Maximum number of task IDs to return"
@@ -70,7 +80,14 @@ async def get_tasks_in_queue(
     For the scheduled queue, tasks are ordered by their scheduled execution time.
     For other queues, tasks are in FIFO order.
     """
-    if not queue_service:
+    # Try to get the queue service from app state first
+    current_queue_service = getattr(request.app.state, 'queue_service', None)
+    
+    # Fallback to global variable
+    if not current_queue_service:
+        current_queue_service = queue_service
+    
+    if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
         from config import settings
@@ -78,6 +95,7 @@ async def get_tasks_in_queue(
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
+            await temp_redis.initialize()
             temp_queue_service = QueueService(temp_redis)
             result = await temp_queue_service.list_tasks_in_queue(
                 queue_name.value, limit
@@ -91,7 +109,7 @@ async def get_tasks_in_queue(
             )
 
     try:
-        return await queue_service.list_tasks_in_queue(queue_name.value, limit)
+        return await current_queue_service.list_tasks_in_queue(queue_name.value, limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -101,6 +119,7 @@ async def get_tasks_in_queue(
 
 @router.get("/dlq", response_model=List[TaskDetail])
 async def get_dlq_tasks(
+    request: Request,
     limit: int = Query(
         default=100, ge=1, le=1000, description="Maximum number of tasks to return"
     ),
@@ -115,7 +134,14 @@ async def get_dlq_tasks(
     - Permanent errors
     - Task age exceeding limits
     """
-    if not queue_service:
+    # Try to get the queue service from app state first
+    current_queue_service = getattr(request.app.state, 'queue_service', None)
+    
+    # Fallback to global variable
+    if not current_queue_service:
+        current_queue_service = queue_service
+    
+    if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
         from config import settings
@@ -123,6 +149,7 @@ async def get_dlq_tasks(
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
+            await temp_redis.initialize()
             temp_queue_service = QueueService(temp_redis)
             result = await temp_queue_service.get_dlq_tasks(limit)
             await temp_redis.close()
@@ -134,7 +161,7 @@ async def get_dlq_tasks(
             )
 
     try:
-        return await queue_service.get_dlq_tasks(limit)
+        return await current_queue_service.get_dlq_tasks(limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -165,7 +192,10 @@ async def stream_queue_status():
             await pubsub.subscribe("queue-updates")
 
             # Send initial queue status
-            current_queue_service = queue_service
+            # Import services module to get the current queue service
+            import services
+            current_queue_service = services.queue_service
+            
             if not current_queue_service:
                 # Try to get from app state as fallback
                 try:
@@ -174,6 +204,7 @@ async def stream_queue_status():
 
                     # Create a temporary service for this request
                     temp_redis = RedisService(config_settings.redis_url)
+                    await temp_redis.initialize()
                     current_queue_service = QueueService(temp_redis)
                 except Exception as e:
                     error_data = {
