@@ -71,19 +71,19 @@ async def test_dependency_error_handling():
             # Check if it's in the DLQ
             dlq_tasks = await redis_conn.lrange("dlq:tasks", 0, -1)
             if task_id in dlq_tasks:
-                print(f"   ✅ Task is correctly present in DLQ")
+                print("   ✅ Task is correctly present in DLQ")
             else:
-                print(f"   ❌ Task is NOT in DLQ list")
+                print("   ❌ Task is NOT in DLQ list")
             
             # Check that it's not in retry queue or scheduled
             retry_tasks = await redis_conn.lrange("tasks:pending:retry", 0, -1)
             scheduled_tasks = await redis_conn.zrange("tasks:scheduled", 0, -1)
             
             if task_id not in retry_tasks and task_id not in scheduled_tasks:
-                print(f"   ✅ Task is correctly NOT in retry or scheduled queues")
+                print("   ✅ Task is correctly NOT in retry or scheduled queues")
                 return True
             else:
-                print(f"   ❌ Task found in retry or scheduled queues (should not be there)")
+                print("   ❌ Task found in retry or scheduled queues (should not be there)")
                 return False
                 
         elif task_state == "SCHEDULED":

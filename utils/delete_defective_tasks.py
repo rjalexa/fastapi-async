@@ -13,8 +13,6 @@ Usage:
 """
 
 import redis
-import sys
-import json
 from datetime import datetime
 from typing import List, Dict, Any
 
@@ -122,7 +120,7 @@ def delete_defective_tasks(redis_url: str = "redis://localhost:6379/0", dry_run:
         print("No defective tasks found.")
         return 0
     
-    print(f"\nDefective tasks found:")
+    print("\nDefective tasks found:")
     print("-" * 80)
     for i, task in enumerate(defective_tasks, 1):
         print(f"{i}. Redis Key: {task['redis_key']}")

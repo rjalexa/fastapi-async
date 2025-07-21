@@ -7,20 +7,16 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
 from redis_config import (
     get_standard_redis,
-    get_pipeline_redis,
-    get_redis_manager,
     initialize_redis,
     close_redis
 )
 from redis_config_simple import (
     initialize_simple_redis,
-    get_simple_redis_manager,
     close_simple_redis,
     get_simple_redis
 )
@@ -63,7 +59,7 @@ class RedisService:
                 if self._manager:
                     try:
                         await close_redis()
-                    except:
+                    except Exception:
                         pass
                     self._manager = None
                 
@@ -345,8 +341,6 @@ class TaskService:
             if not task_data:
                 return False  # Task doesn't exist
             
-            current_state = task_data.get("state")
-            
             # Use Redis transaction to ensure atomicity
             async with self.redis.pipeline(transaction=True) as pipe:
                 # Delete the main task hash
@@ -366,7 +360,7 @@ class TaskService:
                 await pipe.execute()
 
             return True
-        except Exception as e:
+        except Exception:
             # If there's an error getting task data but we know the task exists,
             # try to delete it anyway without updating counters
             try:

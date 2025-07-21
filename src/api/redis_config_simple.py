@@ -2,7 +2,6 @@
 Simplified Redis connection configuration with fallback compatibility.
 """
 
-import asyncio
 import logging
 from typing import Optional
 import redis.asyncio as redis

@@ -29,10 +29,7 @@ from circuit_breaker import (
 from config import settings
 from prompts import load_prompt
 from redis_config import (
-    get_worker_standard_redis,
-    get_worker_task_redis,
-    initialize_worker_redis,
-    close_worker_redis
+    get_worker_standard_redis
 )
 
 # --- Custom Exceptions ----------------------------------------------------
