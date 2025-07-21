@@ -18,6 +18,12 @@ from redis_config import (
     initialize_redis,
     close_redis
 )
+from redis_config_simple import (
+    initialize_simple_redis,
+    get_simple_redis_manager,
+    close_simple_redis,
+    get_simple_redis
+)
 from schemas import (
     QueueStatus,
     TaskDetail,
@@ -37,35 +43,72 @@ class RedisService:
     def __init__(self, redis_url: str):
         self.redis_url = redis_url
         self._manager = None
+        self._simple_manager = None
         self.redis = None
 
     async def initialize(self):
-        """Initialize the optimized Redis connection manager."""
-        if self._manager is None:
-            self._manager = await initialize_redis(self.redis_url)
-            self.redis = await get_standard_redis()
+        """Initialize the optimized Redis connection manager with fallback."""
+        if self._manager is None and self._simple_manager is None:
+            try:
+                # Try optimized Redis configuration first
+                self._manager = await initialize_redis(self.redis_url)
+                self.redis = await get_standard_redis()
+                print("Using optimized Redis connection pool")
+                # Test the connection
+                await self.redis.ping()
+                print("Optimized Redis connection successful")
+            except Exception as e:
+                print(f"Optimized Redis failed ({e}), falling back to simple Redis")
+                # Clean up failed optimized connection
+                if self._manager:
+                    try:
+                        await close_redis()
+                    except:
+                        pass
+                    self._manager = None
+                
+                # Fall back to simple Redis configuration
+                try:
+                    self._simple_manager = await initialize_simple_redis(self.redis_url)
+                    self.redis = await get_simple_redis()
+                    print("Using simple Redis connection")
+                    # Test the simple connection
+                    await self.redis.ping()
+                    print("Simple Redis connection successful")
+                except Exception as e2:
+                    print(f"Simple Redis also failed: {e2}")
+                    # Create a basic fallback connection
+                    import redis.asyncio as redis
+                    self.redis = redis.from_url(self.redis_url, decode_responses=True)
+                    print("Using basic Redis connection as last resort")
 
     async def close(self):
         """Close Redis connection."""
         if self._manager:
             await close_redis()
             self._manager = None
-            self.redis = None
+        if self._simple_manager:
+            await close_simple_redis()
+            self._simple_manager = None
+        self.redis = None
 
     async def ping(self) -> bool:
         """Check Redis connectivity."""
         try:
             if self.redis is None:
                 await self.initialize()
-            await self.redis.ping()
-            return True
-        except Exception:
+            result = await self.redis.ping()
+            return result is True or result == b'PONG' or result == 'PONG'
+        except Exception as e:
+            print(f"Redis ping failed: {e}")
             return False
 
     async def get_pool_stats(self) -> dict:
         """Get Redis connection pool statistics."""
         if self._manager:
             return await self._manager.get_pool_stats()
+        elif self._simple_manager:
+            return await self._simple_manager.get_pool_stats()
         return {"status": "not_initialized"}
 
     async def increment_state_counter(self, state: str, amount: int = 1) -> int:

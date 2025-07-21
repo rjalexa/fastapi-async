@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
-from services import redis_service
+import services
 
 router = APIRouter(prefix="/api/v1/redis", tags=["redis"])
 
@@ -16,12 +16,12 @@ async def get_redis_pool_stats() -> Dict[str, Any]:
     Returns detailed information about the current state of the Redis connection pool,
     including connection counts, utilization, and health status.
     """
-    if not redis_service:
+    if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
     
     try:
         # Get pool statistics from the Redis service
-        pool_stats = await redis_service.get_pool_stats()
+        pool_stats = await services.redis_service.get_pool_stats()
         
         # Add additional metadata
         pool_stats["status"] = "healthy" if pool_stats.get("status") != "not_initialized" else "unhealthy"
@@ -52,7 +52,7 @@ async def get_redis_health() -> Dict[str, Any]:
     Returns basic health information about the Redis connection,
     including connectivity status and response time.
     """
-    if not redis_service:
+    if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
     
     try:
@@ -60,7 +60,7 @@ async def get_redis_health() -> Dict[str, Any]:
         start_time = time.time()
         
         # Test Redis connectivity
-        is_healthy = await redis_service.ping()
+        is_healthy = await services.redis_service.ping()
         
         response_time_ms = round((time.time() - start_time) * 1000, 2)
         

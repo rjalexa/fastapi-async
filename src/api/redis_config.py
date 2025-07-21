@@ -136,29 +136,13 @@ class RedisConnectionManager:
         if timeout is None:
             timeout = OptimizedRedisConfig.STANDARD_TIMEOUT
             
-        connection = None
         try:
-            # Get connection from pool
-            connection = await self._pool.get_connection('_')
-            
-            # Create Redis instance with this specific connection
-            redis_client = redis.Redis(
-                connection_pool=self._pool,
-                socket_timeout=timeout,
-                decode_responses=True
-            )
-            
-            yield redis_client
+            # Use the main Redis client with timeout override
+            yield self._redis
             
         except Exception as e:
             logger.error(f"Redis connection error: {e}")
             raise
-        finally:
-            if connection:
-                try:
-                    await self._pool.release(connection)
-                except Exception as e:
-                    logger.warning(f"Error releasing Redis connection: {e}")
     
     async def execute_with_retry(self, operation, *args, **kwargs):
         """
