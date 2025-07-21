@@ -18,11 +18,14 @@ This project provides a robust framework for handling asynchronous tasks, featur
 
 AsyncTaskFlow is designed to solve the common problem of managing long-running, resource-intensive tasks in a web application without blocking the main request-response cycle. It provides a scalable and resilient architecture for processing tasks in the background, complete with error handling, automatic retries, and detailed monitoring.
 
+To demonstrate the system's capabilities with realistic resource-intensive scenarios, we simulate two demanding remote API tasks using OpenRouter calls to large language models: **text summarization** of articles and **extraction of articles from newspaper PDF files**. These tasks represent typical real-world use cases where external API calls can be slow, expensive, and subject to rate limits, making them perfect examples for showcasing the system's distributed task processing, circuit breaker protection, and rate limiting capabilities.
+
 ### Key Features
 
 - **Asynchronous Task Processing**: Distributed task queue using a custom Redis-based solution.
 - **Decoupled Architecture**: API, queuing, and execution layers are fully independent.
 - **Circuit Breaker Protection**: Built-in circuit breaker for external API calls to prevent cascading failures.
+- **Token Bucket Rate Limiting**: Distributed rate limiting mechanism to prevent remote resource exhaustion from parallel independent workers, ensuring compliance with external API limits.
 - **Advanced Retry Logic**: Intelligent retry scheduling with exponential backoff and dedicated retry queues.
 - **Real-time Monitoring**: A comprehensive frontend dashboard with live updates via Server-Sent Events (SSE).
 - **Production Ready**: Docker-based deployment with proper logging, health checks, and resource management.
@@ -52,6 +55,8 @@ AsyncTaskFlow is designed to solve the common problem of managing long-running, 
     - [Task Queues](#task-queues)
     - [Task Metadata](#task-metadata)
     - [Monitoring \& Metrics](#monitoring--metrics)
+    - [Rate Limiting \& External API Management](#rate-limiting--external-api-management)
+    - [Circuit Breaker \& Worker Management](#circuit-breaker--worker-management)
   - [9. Development](#9-development)
     - [Running Locally](#running-locally)
     - [System Reset](#system-reset)
@@ -156,7 +161,7 @@ Get the application up and running in just a few commands.
     docker compose up -d --build
     ```
 4.  **Access the services:**
-    - **Frontend UI**: [http://localhost:5173](http://localhost:5173)
+    - **Frontend UI**: [http://localhost:3000](http://localhost:3000)
     - **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ## 6. Usage
@@ -178,6 +183,7 @@ The API is divided into several logical groups.
 ### Task Creation (Application-Specific)
 
 - `POST /api/v1/tasks/summarize/`: Create a new text summarization task.
+- `POST /api/v1/tasks/pdfxtract`: Create a new PDF extraction task for extracting articles from newspaper PDF files.
 
 ### Generic Task Management
 
@@ -227,6 +233,35 @@ The system relies on a set of well-defined Redis data structures for its operati
 - **`metrics:tasks:state:{state}`** (String/Counter): A set of counters for each task state (e.g., `metrics:tasks:state:pending`). These are updated atomically and provide an efficient way to get system-wide state counts.
 - **`worker:heartbeat:{worker-id}`** (String): A key used by each worker to report its liveness.
 - **`queue-updates`** (Pub/Sub Channel): Used to broadcast real-time updates to the API for the SSE stream.
+
+### Rate Limiting & External API Management
+
+- **`openrouter:rate_limit_config`** (Hash): Configuration for distributed rate limiting
+  - `requests`: Maximum requests allowed per interval
+  - `interval`: Time interval (e.g., "10s")
+  - `updated_at`: Timestamp of last configuration update
+- **`openrouter:rate_limit:bucket`** (Hash): Token bucket state for rate limiting
+  - `tokens`: Current available tokens
+  - `capacity`: Maximum bucket capacity
+  - `refill_rate`: Tokens added per second
+  - `last_refill`: Last token refill timestamp
+- **`openrouter:credits`** (Hash): OpenRouter API credit monitoring
+  - `balance`: Current credit balance
+  - `usage`: Usage statistics
+  - `last_updated`: Last update timestamp
+
+### Circuit Breaker & Worker Management
+
+- **`circuit_breaker:{service}`** (Hash): Circuit breaker state for external services
+  - `state`: Current state (CLOSED, OPEN, HALF_OPEN)
+  - `failure_count`: Number of consecutive failures
+  - `last_failure_time`: Timestamp of last failure
+  - `next_attempt_time`: When to attempt next request in OPEN state
+- **`worker:active_tasks:{worker-id}`** (Set): Set of task IDs currently being processed by a worker
+- **`worker:stats:{worker-id}`** (Hash): Worker performance statistics
+  - `tasks_completed`: Total completed tasks
+  - `tasks_failed`: Total failed tasks
+  - `last_seen`: Last heartbeat timestamp
 
 ## 9. Development
 
