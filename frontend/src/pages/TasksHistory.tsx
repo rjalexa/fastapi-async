@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchTasks } from '@/lib/tasks-api';
+import { fetchTasks, deleteTask } from '@/lib/tasks-api';
 import { TaskDetail, TaskListResponse, TaskState } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format } from 'date-fns';
 
 const TasksHistory: React.FC = () => {
@@ -15,10 +16,14 @@ const TasksHistory: React.FC = () => {
   const [tasksResponse, setTasksResponse] = useState<TaskListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<TaskDetail | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [filters, setFilters] = useState({
     task_id: searchParams.get('task_id') || '',
     status: searchParams.get('status') || 'all',
+    task_type: searchParams.get('task_type') || 'all',
     page: parseInt(searchParams.get('page') || '1', 10),
   });
 
@@ -26,10 +31,19 @@ const TasksHistory: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const filterParams: Record<string, unknown> = { ...filters, page_size: 10 };
+      const filterParams: Record<string, unknown> = { 
+        ...filters, 
+        page_size: 10,
+        sort_by: 'created_at',
+        sort_order: 'desc'
+      };
       // Don't send status filter if "all" is selected
       if (filters.status === 'all' || filters.status === '') {
         filterParams.status = undefined;
+      }
+      // Don't send task_type filter if "all" is selected
+      if (filters.task_type === 'all' || filters.task_type === '') {
+        filterParams.task_type = undefined;
       }
       // Only send task_id if it has at least 1 character
       if (filters.task_id && filters.task_id.trim().length > 0) {
@@ -81,12 +95,8 @@ const TasksHistory: React.FC = () => {
   };
 
   const getTaskType = (task: TaskDetail): string => {
-    // Check if task has task_type field (new tasks will have this)
-    if (task.task_type) {
-      return task.task_type;
-    }
-    // For backward compatibility, assume summarize for tasks without task_type
-    return 'summarize';
+    // Return the task_type from the backend, which should handle the fallback logic
+    return task.task_type || 'summarize';
   };
 
   const renderTaskTypeBadge = (taskType: string) => {
@@ -103,6 +113,33 @@ const TasksHistory: React.FC = () => {
       return `${duration}s`;
     }
     return 'N/A';
+  };
+
+  const handleDeleteClick = (task: TaskDetail) => {
+    setTaskToDelete(task);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!taskToDelete) return;
+
+    setDeleting(true);
+    try {
+      await deleteTask(taskToDelete.task_id);
+      setDeleteModalOpen(false);
+      setTaskToDelete(null);
+      // Reload tasks to reflect the deletion
+      await loadTasks();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteModalOpen(false);
+    setTaskToDelete(null);
   };
 
   return (
@@ -131,6 +168,19 @@ const TasksHistory: React.FC = () => {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={filters.task_type}
+          onValueChange={(value: string) => handleFilterChange('task_type', value)}
+        >
+          <SelectTrigger className="w-[180px] bg-white border border-gray-300">
+            <SelectValue placeholder="Filter by Type" />
+          </SelectTrigger>
+          <SelectContent className="bg-white border border-gray-300 shadow-lg">
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="summarize">Summarize</SelectItem>
+            <SelectItem value="pdfxtract">PDF Extract</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {loading && <p>Loading...</p>}
@@ -156,39 +206,49 @@ const TasksHistory: React.FC = () => {
                   <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
                   <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
                   <TableCell>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <Button variant="outline" size="sm">View Details</Button>
-                      </SheetTrigger>
-                      <SheetContent className="w-[600px] sm:w-[800px] max-w-[90vw] overflow-y-auto">
-                        <SheetHeader>
-                          <SheetTitle>Task Details: {task.task_id}</SheetTitle>
-                        </SheetHeader>
-                        <div className="py-4 space-y-4">
-                          <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType(task))}</div>
-                          <div><strong>Duration:</strong> {calculateDuration(task)}</div>
-                          <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
-                          <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>
-                          <h3 className="font-bold mt-4">State History</h3>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>State</TableHead>
-                                <TableHead>Timestamp</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {task.state_history.map((entry, index) => (
-                                <TableRow key={index}>
-                                  <TableCell>{renderStateBadge(entry.state)}</TableCell>
-                                  <TableCell>{format(new Date(entry.timestamp), 'PPpp')}</TableCell>
+                    <div className="flex space-x-2">
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <Button variant="outline" size="sm">View Details</Button>
+                        </SheetTrigger>
+                        <SheetContent className="w-[600px] sm:w-[800px] max-w-[90vw] overflow-y-auto">
+                          <SheetHeader>
+                            <SheetTitle>Task Details: {task.task_id}</SheetTitle>
+                          </SheetHeader>
+                          <div className="py-4 space-y-4">
+                            <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType(task))}</div>
+                            <div><strong>Duration:</strong> {calculateDuration(task)}</div>
+                            <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
+                            <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>
+                            <h3 className="font-bold mt-4">State History</h3>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>State</TableHead>
+                                  <TableHead>Timestamp</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      </SheetContent>
-                    </Sheet>
+                              </TableHeader>
+                              <TableBody>
+                                {task.state_history.map((entry, index) => (
+                                  <TableRow key={index}>
+                                    <TableCell>{renderStateBadge(entry.state)}</TableCell>
+                                    <TableCell>{format(new Date(entry.timestamp), 'PPpp')}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </SheetContent>
+                      </Sheet>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDeleteClick(task)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300 hover:border-red-400"
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -196,7 +256,27 @@ const TasksHistory: React.FC = () => {
           </Table>
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">
-              Showing page {tasksResponse.page} of {tasksResponse.total_pages}
+              {(() => {
+                const totalTasks = tasksResponse.total_items;
+                const actualTasksOnPage = tasksResponse.tasks.length;
+                const currentPage = tasksResponse.page;
+                const pageSize = tasksResponse.page_size;
+                
+                if (totalTasks === 0) {
+                  return "No tasks found";
+                }
+                
+                // Calculate the actual start position for this page
+                // The backend handles pagination correctly, so we can trust the page info
+                const startLine = ((currentPage - 1) * pageSize) + 1;
+                const endLine = startLine + actualTasksOnPage - 1;
+                
+                if (actualTasksOnPage === 1) {
+                  return `Showing task ${startLine} of ${totalTasks}`;
+                }
+                
+                return `Showing tasks ${startLine}-${endLine} of ${totalTasks}`;
+              })()}
             </p>
             {shouldShowPagination && (
               <div className="flex items-center space-x-2">
@@ -217,6 +297,37 @@ const TasksHistory: React.FC = () => {
           </div>
         </>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete task <span className="font-mono text-sm">{taskToDelete?.task_id}</span>?
+              <br />
+              <br />
+              This will permanently remove the task from all Redis queues, states, and statistics. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={handleDeleteCancel}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? 'Deleting...' : 'Delete Task'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

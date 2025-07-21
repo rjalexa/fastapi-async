@@ -532,6 +532,104 @@ Requires `aiohttp` for async HTTP client functionality:
 python3 -m pip install aiohttp --user
 ```
 
+### `delete_defective_tasks.py`
+
+**NEW**: Utility to identify and delete defective tasks from Redis that have corrupted data.
+
+This script finds and removes tasks with missing or invalid data such as:
+- Missing task_id (shows as "unknown_id" in frontend)
+- Invalid timestamps (datetime.min or year 1)
+- Missing required fields (task_id, state, created_at)
+
+#### Usage
+
+```bash
+# Dry run - see what would be deleted without actually deleting
+python3 utils/delete_defective_tasks.py --dry-run
+
+# Actually delete the defective tasks
+python3 utils/delete_defective_tasks.py
+
+# Use custom Redis URL
+python3 utils/delete_defective_tasks.py --redis-url redis://localhost:6379/1
+```
+
+#### Command Line Options
+
+- `--redis-url URL`: Redis connection URL (default: redis://localhost:6379/0)
+- `--dry-run`: Show what would be deleted without actually deleting
+- `--help`: Show help message
+
+#### Features
+
+- **Comprehensive Detection**: Identifies multiple types of data corruption
+- **Safe Operation**: Dry-run mode to preview changes before deletion
+- **Detailed Reporting**: Shows all defective task details before deletion
+- **Atomic Deletion**: Uses Redis transactions for safe cleanup
+- **Queue Cleanup**: Removes task references from all queues
+- **Interactive Confirmation**: Requires explicit confirmation before deletion
+
+#### Defective Task Patterns Detected
+
+1. **Missing Task ID**: Tasks without a valid task_id field
+2. **Invalid Timestamps**: Tasks with datetime.min or year 1 dates
+3. **Missing Required Fields**: Tasks lacking essential fields like state or created_at
+4. **Corrupted Date Formats**: Tasks with unparseable date strings
+
+#### Example Output
+
+```
+Defective Task Cleanup Utility
+Redis URL: redis://localhost:6379/0
+Mode: DRY RUN
+
+Connected to Redis at redis://localhost:6379/0
+Scanned 27 total tasks
+Found 3 defective tasks
+
+Defective tasks found:
+--------------------------------------------------------------------------------
+1. Redis Key: task:52334909-bf63-4a69-b326-edb40ef2916a
+   Task ID: missing
+   State: COMPLETED
+   Created: missing
+   Updated: 2025-07-20T19:16:09.875503
+   Completed: 2025-07-20T19:16:09.875503
+   Type: missing
+   Content: missing
+
+DRY RUN: Would delete 3 defective tasks
+```
+
+#### When to Use
+
+- **Data Corruption**: When frontend shows tasks with "unknown_id" or invalid dates
+- **Development Issues**: After development bugs that created malformed tasks
+- **System Cleanup**: Regular maintenance to remove corrupted data
+- **Migration Recovery**: After data migration issues or system upgrades
+- **Frontend Debugging**: When UI shows strange task entries
+
+#### Safety Features
+
+- **Dry-run Mode**: Always test with `--dry-run` first
+- **Interactive Confirmation**: Requires typing "yes" to proceed with deletion
+- **Detailed Preview**: Shows exactly what will be deleted
+- **Transaction Safety**: Uses Redis pipelines for atomic operations
+- **Comprehensive Cleanup**: Removes tasks from all queues and storage locations
+
+#### Integration with Monitoring
+
+Can be used in automated maintenance scripts:
+
+```bash
+# Check for defective tasks and alert if found
+DEFECTIVE_COUNT=$(python3 utils/delete_defective_tasks.py --dry-run | grep "Found.*defective tasks" | awk '{print $2}')
+if [ "$DEFECTIVE_COUNT" -gt 0 ]; then
+    echo "WARNING: $DEFECTIVE_COUNT defective tasks found in Redis"
+    # Send alert or notification
+fi
+```
+
 ## Development
 
 When adding new API endpoints, make sure to update `test_api_endpoints.py` to include tests for the new endpoints.

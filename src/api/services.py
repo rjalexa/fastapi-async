@@ -446,6 +446,13 @@ class TaskService:
                         else None
                     )
 
+                    # Get task type, defaulting to SUMMARIZE for backward compatibility
+                    task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+                    try:
+                        task_type = TaskType(task_type_str)
+                    except ValueError:
+                        task_type = TaskType.SUMMARIZE
+
                     tasks.append(
                         TaskDetail(
                             task_id=task_data["task_id"],
@@ -460,6 +467,7 @@ class TaskService:
                             updated_at=updated_at,
                             completed_at=completed_at,
                             result=task_data.get("result") or None,
+                            task_type=task_type,
                             error_history=error_history,
                             state_history=state_history,
                         )
@@ -535,7 +543,8 @@ class TaskService:
             if val is None:
                 # If the field doesn't exist, return a default value for sorting
                 if sort_by in ["created_at", "updated_at", "completed_at"]:
-                    return datetime.min if not reverse else datetime.max
+                    # For datetime fields, put invalid/missing dates at the end
+                    return datetime.min if reverse else datetime.max
                 elif sort_by in ["retry_count", "max_retries"]:
                     return 0
                 else:
@@ -545,8 +554,16 @@ class TaskService:
                 return int(val)
             if isinstance(val, str):
                 try:
-                    return datetime.fromisoformat(val)
+                    parsed_date = datetime.fromisoformat(val)
+                    # Check if this is an invalid date (datetime.min means invalid)
+                    if parsed_date == datetime.min:
+                        # Put invalid dates at the end regardless of sort order
+                        return datetime.min if reverse else datetime.max
+                    return parsed_date
                 except ValueError:
+                    # For non-datetime strings that can't be parsed, put them at the end
+                    if sort_by in ["created_at", "updated_at", "completed_at"]:
+                        return datetime.min if reverse else datetime.max
                     return val
             return val
 
@@ -562,47 +579,75 @@ class TaskService:
         end_index = start_index + page_size
         paginated_data = filtered_tasks[start_index:end_index]
 
+        def parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
+            if not date_str:
+                return None
+            try:
+                return datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                return None
+
+        def parse_json_field(field_data: Optional[str]) -> List:
+            if not field_data:
+                return []
+            try:
+                return json.loads(field_data)
+            except (json.JSONDecodeError, TypeError):
+                return []
+
         tasks = []
         for task_data in paginated_data:
+            # Defensively parse all fields to avoid skipping tasks
+            task_id_val = task_data.get("task_id", "unknown_id")
+            
             try:
-                error_history = json.loads(task_data.get("error_history", "[]"))
-                state_history = json.loads(task_data.get("state_history", "[]"))
+                state = TaskState(task_data.get("state", TaskState.FAILED.value))
+            except ValueError:
+                state = TaskState.FAILED
 
-                # Safely parse datetime fields
-                created_at = datetime.fromisoformat(task_data["created_at"])
-                updated_at = datetime.fromisoformat(task_data["updated_at"])
-                completed_at = (
-                    datetime.fromisoformat(task_data["completed_at"])
-                    if task_data.get("completed_at")
-                    else None
-                )
-                retry_after = (
-                    datetime.fromisoformat(task_data["retry_after"])
-                    if task_data.get("retry_after")
-                    else None
-                )
+            try:
+                retry_count = int(task_data.get("retry_count", 0))
+            except (ValueError, TypeError):
+                retry_count = 0
 
-                tasks.append(
-                    TaskDetail(
-                        task_id=task_data["task_id"],
-                        state=TaskState(task_data["state"]),
-                        content=task_data["content"],
-                        retry_count=int(task_data["retry_count"]),
-                        max_retries=int(task_data["max_retries"]),
-                        last_error=task_data.get("last_error") or None,
-                        error_type=task_data.get("error_type") or None,
-                        retry_after=retry_after,
-                        created_at=created_at,
-                        updated_at=updated_at,
-                        completed_at=completed_at,
-                        result=task_data.get("result") or None,
-                        error_history=error_history,
-                        state_history=state_history,
-                    )
+            try:
+                max_retries = int(task_data.get("max_retries", settings.max_retries))
+            except (ValueError, TypeError):
+                max_retries = settings.max_retries
+
+            created_at = parse_iso_date(task_data.get("created_at")) or datetime.min
+            updated_at = parse_iso_date(task_data.get("updated_at")) or datetime.min
+            completed_at = parse_iso_date(task_data.get("completed_at"))
+            retry_after = parse_iso_date(task_data.get("retry_after"))
+
+            error_history = parse_json_field(task_data.get("error_history"))
+            state_history = parse_json_field(task_data.get("state_history"))
+
+            task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+            try:
+                task_type = TaskType(task_type_str)
+            except ValueError:
+                task_type = TaskType.SUMMARIZE
+
+            tasks.append(
+                TaskDetail(
+                    task_id=task_id_val,
+                    state=state,
+                    content=task_data.get("content", ""),
+                    retry_count=retry_count,
+                    max_retries=max_retries,
+                    last_error=task_data.get("last_error"),
+                    error_type=task_data.get("error_type"),
+                    retry_after=retry_after,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    completed_at=completed_at,
+                    result=task_data.get("result"),
+                    task_type=task_type,
+                    error_history=error_history,
+                    state_history=state_history,
                 )
-            except (ValueError, TypeError, KeyError):
-                # Skip tasks with invalid data
-                continue
+            )
 
         return TaskListResponse(
             tasks=tasks,
@@ -729,56 +774,78 @@ class TaskService:
             end_index = start_index + page_size
             paginated_data = filtered_tasks[start_index:end_index]
 
-            tasks = []
-            for task_data in paginated_data:
-                try:
-                    error_history = json.loads(task_data.get("error_history", "[]"))
-                    state_history = json.loads(task_data.get("state_history", "[]"))
+        def parse_iso_date(date_str: Optional[str]) -> Optional[datetime]:
+            if not date_str:
+                return None
+            try:
+                return datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                return None
 
-                    created_at = datetime.fromisoformat(task_data["created_at"])
-                    updated_at = datetime.fromisoformat(task_data["updated_at"])
-                    completed_at = (
-                        datetime.fromisoformat(task_data["completed_at"])
-                        if task_data.get("completed_at")
-                        else None
-                    )
-                    retry_after = (
-                        datetime.fromisoformat(task_data["retry_after"])
-                        if task_data.get("retry_after")
-                        else None
-                    )
+        def parse_json_field(field_data: Optional[str]) -> List:
+            if not field_data:
+                return []
+            try:
+                return json.loads(field_data)
+            except (json.JSONDecodeError, TypeError):
+                return []
 
-                    # Get task type, defaulting to SUMMARIZE for backward compatibility
-                    task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
-                    try:
-                        task_type = TaskType(task_type_str)
-                    except ValueError:
-                        task_type = TaskType.SUMMARIZE
+        tasks = []
+        for task_data in paginated_data:
+            # Defensively parse all fields to avoid skipping tasks
+            task_id_val = task_data.get("task_id", "unknown_id")
 
-                    content = task_data.get("content", "")
-                    result = task_data.get("result", "")
+            try:
+                state = TaskState(task_data.get("state", TaskState.FAILED.value))
+            except ValueError:
+                state = TaskState.FAILED
 
-                    tasks.append(
-                        TaskSummary(
-                            task_id=task_data["task_id"],
-                            state=TaskState(task_data["state"]),
-                            retry_count=int(task_data["retry_count"]),
-                            max_retries=int(task_data["max_retries"]),
-                            last_error=task_data.get("last_error") or None,
-                            error_type=task_data.get("error_type") or None,
-                            retry_after=retry_after,
-                            created_at=created_at,
-                            updated_at=updated_at,
-                            completed_at=completed_at,
-                            task_type=task_type,
-                            content_length=len(content) if content else 0,
-                            has_result=bool(result),
-                            error_history=error_history,
-                            state_history=state_history,
-                        )
-                    )
-                except (ValueError, TypeError, KeyError):
-                    continue
+            try:
+                retry_count = int(task_data.get("retry_count", 0))
+            except (ValueError, TypeError):
+                retry_count = 0
+
+            try:
+                max_retries = int(task_data.get("max_retries", settings.max_retries))
+            except (ValueError, TypeError):
+                max_retries = settings.max_retries
+
+            created_at = parse_iso_date(task_data.get("created_at")) or datetime.min
+            updated_at = parse_iso_date(task_data.get("updated_at")) or datetime.min
+            completed_at = parse_iso_date(task_data.get("completed_at"))
+            retry_after = parse_iso_date(task_data.get("retry_after"))
+
+            error_history = parse_json_field(task_data.get("error_history"))
+            state_history = parse_json_field(task_data.get("state_history"))
+
+            task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+            try:
+                task_type = TaskType(task_type_str)
+            except ValueError:
+                task_type = TaskType.SUMMARIZE
+
+            content = task_data.get("content", "")
+            result = task_data.get("result", "")
+
+            tasks.append(
+                TaskSummary(
+                    task_id=task_id_val,
+                    state=state,
+                    retry_count=retry_count,
+                    max_retries=max_retries,
+                    last_error=task_data.get("last_error"),
+                    error_type=task_data.get("error_type"),
+                    retry_after=retry_after,
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    completed_at=completed_at,
+                    task_type=task_type,
+                    content_length=len(content),
+                    has_result=bool(result),
+                    error_history=error_history,
+                    state_history=state_history,
+                )
+            )
 
             return TaskSummaryListResponse(
                 tasks=tasks,
