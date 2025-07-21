@@ -395,7 +395,7 @@ class APITester:
             if result["success"]:
                 print(f"  ✅ {result['method']} {result['path']} - {result['actual_status']}")
     
-    def save_detailed_results(self, filename: str = "api_test_results.json"):
+    def save_detailed_results(self, filename: str = "utils/test_api_results.json"):
         """Save detailed test results to JSON file."""
         with open(filename, "w") as f:
             json.dump({

@@ -333,4 +333,4 @@ settings.local.*
 .ruff_cache
 
 frontend/images
-api_test_results.json
+utils/test_api_results.json
