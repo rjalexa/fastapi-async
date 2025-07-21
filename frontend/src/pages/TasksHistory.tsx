@@ -80,10 +80,12 @@ const TasksHistory: React.FC = () => {
     return <Badge className={`${colorMap[state]} text-white border`}>{state}</Badge>;
   };
 
-  const getTaskType = (): string => {
-    // For now, all tasks are summarize tasks since only summarize endpoint is implemented
-    // When pdfxtract is implemented, this logic can be enhanced to determine task type
-    // based on task content, metadata, or API endpoint used
+  const getTaskType = (task: TaskDetail): string => {
+    // Check if task has task_type field (new tasks will have this)
+    if (task.task_type) {
+      return task.task_type;
+    }
+    // For backward compatibility, assume summarize for tasks without task_type
     return 'summarize';
   };
 
@@ -151,7 +153,7 @@ const TasksHistory: React.FC = () => {
                 <TableRow key={task.task_id}>
                   <TableCell className="font-mono text-xs">{task.task_id}</TableCell>
                   <TableCell>{renderStateBadge(task.state)}</TableCell>
-                  <TableCell>{renderTaskTypeBadge(getTaskType())}</TableCell>
+                  <TableCell>{renderTaskTypeBadge(getTaskType(task))}</TableCell>
                   <TableCell>{format(new Date(task.created_at), 'PPpp')}</TableCell>
                   <TableCell>
                     <Sheet>
@@ -163,7 +165,7 @@ const TasksHistory: React.FC = () => {
                           <SheetTitle>Task Details: {task.task_id}</SheetTitle>
                         </SheetHeader>
                         <div className="py-4 space-y-4">
-                          <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType())}</div>
+                          <div><strong>Task Type:</strong> {renderTaskTypeBadge(getTaskType(task))}</div>
                           <div><strong>Duration:</strong> {calculateDuration(task)}</div>
                           <div><strong>Content:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.content}</pre></div>
                           <div><strong>Result:</strong><pre className="prose bg-gray-100 p-2 rounded-md whitespace-pre-wrap">{task.result || 'N/A'}</pre></div>

@@ -7,15 +7,21 @@ suitable for a FastAPI-based monitoring frontend.
 """
 
 import asyncio
+import base64
+import io
 import json
 import os
 import random
+import tempfile
 import time
 from datetime import datetime
+from typing import List
 
 import redis.asyncio as aioredis
 from celery import Celery, Task
 from celery.worker.control import Panel
+from pdf2image import convert_from_bytes
+from PIL import Image
 
 from circuit_breaker import (
     call_openrouter_api,
@@ -404,6 +410,121 @@ async def summarize_text_with_pybreaker(content: str) -> str:
             raise exc
 
 
+async def extract_pdf_with_pybreaker(pdf_content_b64: str, filename: str, issue_date: str = None) -> str:
+    """Extract articles from PDF pages via OpenRouter protected by a circuit breaker."""
+    if not settings.openrouter_api_key:
+        raise PermanentError("OpenRouter API key not configured")
+    
+    try:
+        # Decode base64 PDF content
+        pdf_bytes = base64.b64decode(pdf_content_b64)
+        
+        # Convert PDF to images
+        pages = convert_from_bytes(pdf_bytes, dpi=300, fmt='PNG')
+        
+        # Load the PDF extraction prompt
+        system_prompt = load_prompt("pdfxtract")
+        
+        # Process each page
+        all_pages_data = []
+        
+        for page_num, page_image in enumerate(pages, 1):
+            try:
+                # Convert PIL Image to base64 for API
+                img_buffer = io.BytesIO()
+                page_image.save(img_buffer, format='PNG')
+                img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+                
+                # Create the messages payload for the API with system and user roles
+                user_content = f"Analyze this newspaper page image. Filename: {filename}, Page number: {page_num}"
+                if issue_date:
+                    user_content += f", Issue date: {issue_date}"
+                
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user", 
+                        "content": [
+                            {"type": "text", "text": user_content},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{img_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ]
+                
+                # Call the OpenRouter API for this page
+                page_result = await call_openrouter_api(messages)
+                
+                # Parse the JSON response
+                try:
+                    page_data = json.loads(page_result)
+                    # Extract the pages array from the response
+                    if "pages" in page_data and len(page_data["pages"]) > 0:
+                        all_pages_data.extend(page_data["pages"])
+                    else:
+                        # If no pages array, create a skipped page entry
+                        all_pages_data.append({
+                            "page_number": page_num,
+                            "status": "skipped",
+                            "reason": "No valid page data returned from LLM",
+                            "articles": []
+                        })
+                except json.JSONDecodeError as e:
+                    # If JSON parsing fails, create a skipped page entry
+                    all_pages_data.append({
+                        "page_number": page_num,
+                        "status": "skipped",
+                        "reason": f"JSON parsing failed: {str(e)}",
+                        "articles": []
+                    })
+                    
+            except Exception as e:
+                # If page processing fails, create a skipped page entry
+                all_pages_data.append({
+                    "page_number": page_num,
+                    "status": "skipped",
+                    "reason": f"Page processing failed: {str(e)}",
+                    "articles": []
+                })
+        
+        # Create the final document structure
+        final_result = {
+            "filename": filename,
+            "issue_date": issue_date or "unknown",
+            "pages": all_pages_data
+        }
+        
+        return json.dumps(final_result, ensure_ascii=False, indent=2)
+        
+    except (FileNotFoundError, ValueError) as e:
+        # Prompt loading/formatting errors are permanent
+        raise PermanentError(f"PDF extraction error: {str(e)}")
+    except Exception as e:
+        msg = str(e)
+        if "circuit breaker" in msg.lower():
+            raise TransientError(f"Circuit breaker protection: {msg}")
+
+        # Simple status code parsing
+        code = 0
+        if "status_code=" in msg:
+            try:
+                code_str = msg.split("status_code=")[1].split(" ")[0].strip()
+                code = int(code_str)
+            except (IndexError, ValueError):
+                pass
+
+        if classify_error(code, msg) == "PermanentError":
+            raise PermanentError(f"PDF extraction API error: {msg}")
+        else:
+            exc = TransientError(f"PDF extraction API error: {msg}")
+            exc.status_code = code
+            raise exc
+
+
 # --- Celery Tasks ---------------------------------------------------------
 
 
@@ -414,10 +535,10 @@ async def update_worker_heartbeat(redis_conn: aioredis.Redis, worker_id: str) ->
     await redis_conn.setex(heartbeat_key, 90, current_time)  # Expire after 90 seconds
 
 
-@app.task(name="summarize_text", bind=True)
-def summarize_task(self: Task, task_id: str) -> str:
+@app.task(name="process_task", bind=True)
+def process_task(self: Task, task_id: str) -> str:
     """
-    Main summarization task using custom retry scheduling.
+    Main task processor that handles different task types.
     `bind=True` provides access to the task instance via `self`.
     """
     redis_conn = get_async_redis_connection()
@@ -433,8 +554,10 @@ def summarize_task(self: Task, task_id: str) -> str:
             raise PermanentError(f"Task {task_id} not found in Redis.")
 
         content = data.get("content", "")
+        task_type = data.get("task_type", "summarize")
+        
         if not content:
-            raise PermanentError("No content to summarize.")
+            raise PermanentError("No content to process.")
 
         # Check for max retries before execution
         if retry_count >= settings.max_retries:
@@ -444,7 +567,23 @@ def summarize_task(self: Task, task_id: str) -> str:
             redis_conn, task_id, "ACTIVE", worker_id=worker_id
         )
 
-        result = await summarize_text_with_pybreaker(content)
+        # Process based on task type
+        if task_type == "pdfxtract":
+            # Parse metadata for PDF extraction
+            metadata = {}
+            if data.get("metadata"):
+                try:
+                    metadata = json.loads(data["metadata"])
+                except json.JSONDecodeError:
+                    metadata = {}
+            
+            filename = metadata.get("filename", "unknown.pdf")
+            issue_date = metadata.get("issue_date")
+            
+            result = await extract_pdf_with_pybreaker(content, filename, issue_date)
+        else:
+            # Default to summarization
+            result = await summarize_text_with_pybreaker(content)
 
         await update_task_state(
             redis_conn,
@@ -457,7 +596,7 @@ def summarize_task(self: Task, task_id: str) -> str:
         # Update heartbeat at end of task
         await update_worker_heartbeat(redis_conn, worker_id)
         
-        return f"Task {task_id} completed successfully."
+        return f"Task {task_id} ({task_type}) completed successfully."
 
     try:
         return asyncio.run(_run_task())
@@ -473,6 +612,16 @@ def summarize_task(self: Task, task_id: str) -> str:
         exc = TransientError(f"An unexpected error occurred: {str(e)}")
         asyncio.run(schedule_task_for_retry(redis_conn, task_id, retry_count, exc))
         return f"Task {task_id} failed with unexpected error, scheduled for retry."
+
+
+# Keep the old summarize_task for backward compatibility
+@app.task(name="summarize_text", bind=True)
+def summarize_task(self: Task, task_id: str) -> str:
+    """
+    Legacy summarization task - redirects to process_task.
+    `bind=True` provides access to the task instance via `self`.
+    """
+    return process_task.apply_async(args=[task_id], task_id=self.request.id).get()
 
 
 @app.task(name="process_scheduled_tasks")
@@ -563,8 +712,8 @@ def consume_tasks(self: Task) -> str:
                 logger.info(f"Received task {task_id} from {queue_name}")
                 
                 # Remove task from the queue it came from (already done by BLPOP)
-                # Now trigger the actual summarization task
-                summarize_task.delay(task_id)
+                # Now trigger the actual task processing
+                process_task.delay(task_id)
                 
                 processed_count += 1
                 logger.info(f"Dispatched task {task_id} for processing (total: {processed_count})")

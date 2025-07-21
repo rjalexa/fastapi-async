@@ -19,6 +19,13 @@ class TaskState(str, Enum):
     DLQ = "DLQ"
 
 
+class TaskType(str, Enum):
+    """Task type enumeration."""
+    
+    SUMMARIZE = "summarize"
+    PDFXTRACT = "pdfxtract"
+
+
 class QueueName(str, Enum):
     """Enum for the different task queues."""
     
@@ -65,6 +72,7 @@ class TaskDetail(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     completed_at: Optional[datetime] = Field(None, description="Completion timestamp")
     result: Optional[str] = Field(None, description="Summarization result")
+    task_type: Optional[TaskType] = Field(TaskType.SUMMARIZE, description="Type of task")
     error_history: List[Dict[str, Any]] = Field(
         default_factory=list, description="History of errors"
     )
@@ -122,3 +130,40 @@ class TaskListResponse(BaseModel):
     total_items: int = Field(..., description="Total number of items")
     total_pages: int = Field(..., description="Total number of pages")
     status: Optional[TaskState] = Field(None, description="Filter status used")
+
+
+# PDF Extraction Schemas
+
+class Article(BaseModel):
+    """Schema for a newspaper article."""
+    
+    title: str = Field("", description="Article title")
+    subtitle: str = Field("", description="Article subtitle")
+    author: str = Field("", description="Article author")
+    body: str = Field(..., description="Article body text")
+    topics: List[str] = Field(default_factory=list, description="Article topics/tags")
+    summary: str = Field("", description="Article summary")
+
+
+class Page(BaseModel):
+    """Schema for a newspaper page."""
+    
+    page_number: int = Field(..., description="Page number")
+    status: str = Field("processed", description="Processing status: 'processed' or 'skipped'")
+    reason: str = Field("", description="Reason for skipping if status is 'skipped'")
+    articles: List[Article] = Field(default_factory=list, description="Articles on this page")
+
+
+class NewspaperEdition(BaseModel):
+    """Schema for a complete newspaper edition."""
+    
+    filename: str = Field(..., description="Original PDF filename")
+    issue_date: str = Field(..., description="Issue date in ISO 8601 format")
+    pages: List[Page] = Field(default_factory=list, description="Pages in the edition")
+
+
+class PdfTaskCreate(BaseModel):
+    """Schema for creating a PDF extraction task."""
+    
+    filename: str = Field(..., description="PDF filename")
+    issue_date: Optional[str] = Field(None, description="Issue date in ISO 8601 format (optional)")

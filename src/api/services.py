@@ -12,7 +12,7 @@ import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
-from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP, TaskListResponse
+from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP, TaskListResponse, TaskType
 
 
 class RedisService:
@@ -76,7 +76,12 @@ class TaskService:
         self.redis = redis_service.redis
         self.redis_service = redis_service
 
-    async def create_task(self, content: str) -> str:
+    async def create_task(
+        self, 
+        content: str, 
+        task_type: TaskType = TaskType.SUMMARIZE,
+        metadata: Optional[Dict[str, any]] = None
+    ) -> str:
         """Create a new task and queue it for processing."""
         task_id = str(uuid4())
         now = datetime.utcnow()
@@ -84,6 +89,7 @@ class TaskService:
         task_data = {
             "task_id": task_id,
             "content": content,
+            "task_type": task_type.value,
             "state": TaskState.PENDING.value,
             "retry_count": 0,
             "max_retries": settings.max_retries,
@@ -97,6 +103,10 @@ class TaskService:
             "error_history": json.dumps([]),
             "state_history": json.dumps([{"state": TaskState.PENDING.value, "timestamp": now.isoformat()}]),
         }
+        
+        # Add metadata if provided
+        if metadata:
+            task_data["metadata"] = json.dumps(metadata)
 
         # Use Redis transaction to ensure atomicity
         async with self.redis.pipeline(transaction=True) as pipe:
@@ -149,6 +159,13 @@ class TaskService:
             else None
         )
 
+        # Get task type, defaulting to SUMMARIZE for backward compatibility
+        task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+        try:
+            task_type = TaskType(task_type_str)
+        except ValueError:
+            task_type = TaskType.SUMMARIZE
+
         return TaskDetail(
             task_id=task_data["task_id"],
             state=TaskState(task_data["state"]),
@@ -162,6 +179,7 @@ class TaskService:
             updated_at=updated_at,
             completed_at=completed_at,
             result=task_data.get("result") or None,
+            task_type=task_type,
             error_history=error_history,
             state_history=state_history,
         )
