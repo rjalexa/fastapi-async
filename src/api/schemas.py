@@ -21,14 +21,14 @@ class TaskState(str, Enum):
 
 class TaskType(str, Enum):
     """Task type enumeration."""
-    
+
     SUMMARIZE = "summarize"
     PDFXTRACT = "pdfxtract"
 
 
 class QueueName(str, Enum):
     """Enum for the different task queues."""
-    
+
     PRIMARY = "primary"
     RETRY = "retry"
     SCHEDULED = "scheduled"
@@ -72,7 +72,37 @@ class TaskDetail(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     completed_at: Optional[datetime] = Field(None, description="Completion timestamp")
     result: Optional[str] = Field(None, description="Summarization result")
-    task_type: Optional[TaskType] = Field(TaskType.SUMMARIZE, description="Type of task")
+    task_type: Optional[TaskType] = Field(
+        TaskType.SUMMARIZE, description="Type of task"
+    )
+    error_history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="History of errors"
+    )
+    state_history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="History of state transitions"
+    )
+
+
+class TaskSummary(BaseModel):
+    """Schema for task summary information (without content field)."""
+
+    task_id: str = Field(..., description="Unique task identifier")
+    state: TaskState = Field(..., description="Current task state")
+    retry_count: int = Field(..., description="Number of retry attempts")
+    max_retries: int = Field(..., description="Maximum allowed retries")
+    last_error: Optional[str] = Field(None, description="Last error message")
+    error_type: Optional[str] = Field(None, description="Type of last error")
+    retry_after: Optional[datetime] = Field(None, description="Next retry time")
+    created_at: datetime = Field(..., description="Task creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    completed_at: Optional[datetime] = Field(None, description="Completion timestamp")
+    task_type: Optional[TaskType] = Field(
+        TaskType.SUMMARIZE, description="Type of task"
+    )
+    content_length: Optional[int] = Field(
+        None, description="Length of content in characters"
+    )
+    has_result: bool = Field(False, description="Whether task has a result")
     error_history: List[Dict[str, Any]] = Field(
         default_factory=list, description="History of errors"
     )
@@ -124,7 +154,22 @@ class TaskDeleteResponse(BaseModel):
 class TaskListResponse(BaseModel):
     """Schema for task list response."""
 
-    tasks: List[TaskDetail] = Field(..., description="List of tasks matching the criteria")
+    tasks: List[TaskDetail] = Field(
+        ..., description="List of tasks matching the criteria"
+    )
+    page: int = Field(..., description="Current page number")
+    page_size: int = Field(..., description="Number of items per page")
+    total_items: int = Field(..., description="Total number of items")
+    total_pages: int = Field(..., description="Total number of pages")
+    status: Optional[TaskState] = Field(None, description="Filter status used")
+
+
+class TaskSummaryListResponse(BaseModel):
+    """Schema for task list response with summary information only."""
+
+    tasks: List[TaskSummary] = Field(
+        ..., description="List of task summaries matching the criteria"
+    )
     page: int = Field(..., description="Current page number")
     page_size: int = Field(..., description="Number of items per page")
     total_items: int = Field(..., description="Total number of items")
@@ -134,9 +179,10 @@ class TaskListResponse(BaseModel):
 
 # PDF Extraction Schemas
 
+
 class Article(BaseModel):
     """Schema for a newspaper article."""
-    
+
     title: str = Field("", description="Article title")
     subtitle: str = Field("", description="Article subtitle")
     author: str = Field("", description="Article author")
@@ -147,16 +193,20 @@ class Article(BaseModel):
 
 class Page(BaseModel):
     """Schema for a newspaper page."""
-    
+
     page_number: int = Field(..., description="Page number")
-    status: str = Field("processed", description="Processing status: 'processed' or 'skipped'")
+    status: str = Field(
+        "processed", description="Processing status: 'processed' or 'skipped'"
+    )
     reason: str = Field("", description="Reason for skipping if status is 'skipped'")
-    articles: List[Article] = Field(default_factory=list, description="Articles on this page")
+    articles: List[Article] = Field(
+        default_factory=list, description="Articles on this page"
+    )
 
 
 class NewspaperEdition(BaseModel):
     """Schema for a complete newspaper edition."""
-    
+
     filename: str = Field(..., description="Original PDF filename")
     issue_date: str = Field(..., description="Issue date in ISO 8601 format")
     pages: List[Page] = Field(default_factory=list, description="Pages in the edition")
@@ -164,6 +214,8 @@ class NewspaperEdition(BaseModel):
 
 class PdfTaskCreate(BaseModel):
     """Schema for creating a PDF extraction task."""
-    
+
     filename: str = Field(..., description="PDF filename")
-    issue_date: Optional[str] = Field(None, description="Issue date in ISO 8601 format (optional)")
+    issue_date: Optional[str] = Field(
+        None, description="Issue date in ISO 8601 format (optional)"
+    )

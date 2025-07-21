@@ -6,7 +6,6 @@ import logging
 from celery import Celery
 
 from config import settings
-from tasks import process_scheduled_tasks, summarize_task
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))

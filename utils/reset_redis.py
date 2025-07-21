@@ -10,8 +10,7 @@ import redis
 
 
 async def reset_redis_data(
-    redis_url: str = "redis://localhost:6379/0",
-    confirm: bool = False
+    redis_url: str = "redis://localhost:6379/0", confirm: bool = False
 ) -> Dict[str, Any]:
     """Reset all Redis data by flushing the database."""
     try:
@@ -23,43 +22,49 @@ async def reset_redis_data(
         if not confirm:
             # Get current data stats before reset
             info = r.info()
-            db_keys = info.get('db0', {}).get('keys', 0) if 'db0' in info else 0
-            
+            db_keys = info.get("db0", {}).get("keys", 0) if "db0" in info else 0
+
             return {
                 "status": "confirmation_required",
                 "message": f"Redis contains {db_keys} keys. Use --confirm to proceed with reset.",
                 "keys_count": db_keys,
-                "redis_url": redis_url
+                "redis_url": redis_url,
             }
 
         # Get stats before reset
         info_before = r.info()
-        db_keys_before = info_before.get('db0', {}).get('keys', 0) if 'db0' in info_before else 0
+        db_keys_before = (
+            info_before.get("db0", {}).get("keys", 0) if "db0" in info_before else 0
+        )
 
         # Perform the reset
         r.flushall()
 
         # Verify reset
         info_after = r.info()
-        db_keys_after = info_after.get('db0', {}).get('keys', 0) if 'db0' in info_after else 0
+        db_keys_after = (
+            info_after.get("db0", {}).get("keys", 0) if "db0" in info_after else 0
+        )
 
         return {
             "status": "success",
             "message": "Redis data reset completed successfully",
             "keys_before": db_keys_before,
             "keys_after": db_keys_after,
-            "redis_url": redis_url
+            "redis_url": redis_url,
         }
 
     except Exception as e:
         return {
-            "status": "error", 
+            "status": "error",
             "message": f"Redis reset failed: {str(e)}",
-            "redis_url": redis_url
+            "redis_url": redis_url,
         }
 
 
-async def inspect_before_reset(redis_url: str = "redis://localhost:6379/0") -> Dict[str, Any]:
+async def inspect_before_reset(
+    redis_url: str = "redis://localhost:6379/0",
+) -> Dict[str, Any]:
     """Inspect current Redis state before reset."""
     try:
         r = redis.from_url(redis_url, decode_responses=True)
@@ -85,26 +90,23 @@ async def inspect_before_reset(redis_url: str = "redis://localhost:6379/0") -> D
             "queue_lengths": queues,
             "task_metadata_count": len(task_keys),
             "dlq_task_metadata_count": len(dlq_task_keys),
-            "sample_keys": all_keys[:10] if all_keys else []
+            "sample_keys": all_keys[:10] if all_keys else [],
         }
 
     except Exception as e:
-        return {
-            "status": "error", 
-            "message": f"Redis inspection failed: {str(e)}"
-        }
+        return {"status": "error", "message": f"Redis inspection failed: {str(e)}"}
 
 
 async def main():
     """Run Redis reset utility."""
     import sys
-    
+
     # Get Redis URL from environment or use default
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    
+
     # Check for confirmation flag
     confirm = "--confirm" in sys.argv or "-y" in sys.argv
-    
+
     print("AsyncTaskFlow Redis Reset Utility")
     print("=" * 40)
     print(f"Redis URL: {redis_url}")

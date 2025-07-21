@@ -8,50 +8,49 @@ the result backend in favor of our custom task:{task_id} storage.
 
 import redis
 import sys
-from typing import List
 
 
 def cleanup_celery_meta_keys(redis_url: str = "redis://localhost:6379/0") -> int:
     """
     Remove all celery-task-meta-* keys from Redis.
-    
+
     Args:
         redis_url: Redis connection URL
-        
+
     Returns:
         Number of keys deleted
     """
     try:
         # Connect to Redis
         r = redis.from_url(redis_url, decode_responses=True)
-        
+
         # Test connection
         r.ping()
         print(f"Connected to Redis at {redis_url}")
-        
+
         # Find all celery-task-meta-* keys
         pattern = "celery-task-meta-*"
         keys = list(r.scan_iter(match=pattern))
-        
+
         if not keys:
             print("No celery-task-meta-* keys found.")
             return 0
-        
+
         print(f"Found {len(keys)} celery-task-meta-* keys to delete.")
-        
+
         # Delete keys in batches for efficiency
         batch_size = 100
         deleted_count = 0
-        
+
         for i in range(0, len(keys), batch_size):
-            batch = keys[i:i + batch_size]
+            batch = keys[i : i + batch_size]
             deleted = r.delete(*batch)
             deleted_count += deleted
             print(f"Deleted batch {i//batch_size + 1}: {deleted} keys")
-        
+
         print(f"Successfully deleted {deleted_count} celery-task-meta-* keys.")
         return deleted_count
-        
+
     except redis.RedisError as e:
         print(f"Redis error: {e}")
         return 0
@@ -63,23 +62,23 @@ def cleanup_celery_meta_keys(redis_url: str = "redis://localhost:6379/0") -> int
 def main():
     """Main function to run the cleanup."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="Clean up celery-task-meta-* keys from Redis"
     )
     parser.add_argument(
         "--redis-url",
         default="redis://localhost:6379/0",
-        help="Redis connection URL (default: redis://localhost:6379/0)"
+        help="Redis connection URL (default: redis://localhost:6379/0)",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what would be deleted without actually deleting"
+        help="Show what would be deleted without actually deleting",
     )
-    
+
     args = parser.parse_args()
-    
+
     if args.dry_run:
         # Connect and count keys without deleting
         try:

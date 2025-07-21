@@ -21,20 +21,20 @@ import httpx
 
 class MultilingualTaskGenerator:
     """Generator for multilingual fake news summarization tasks."""
-    
+
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url.rstrip("/")
         self.client = None
         self.created_tasks = []
-        
+
     async def __aenter__(self):
         self.client = httpx.AsyncClient(timeout=30.0)
         return self
-        
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.client:
             await self.client.aclose()
-    
+
     def get_italian_fake_news_articles(self) -> List[str]:
         """Generate 5 Italian fake news articles of approximately 300 words each."""
         return [
@@ -48,7 +48,6 @@ class MultilingualTaskGenerator:
             Secondo le nostre fonti, oltre 40 milioni di italiani sono già stati "marcati" attraverso la campagna vaccinale. I sintomi includono perdita di memoria, cambiamenti comportamentali e obbedienza cieca alle direttive governative. Il premier Draghi avrebbe personalmente supervisionato l'operazione insieme a rappresentanti del World Economic Forum.
             
             L'Organizzazione Mondiale della Sanità ha rifiutato di commentare, ma fonti vicine all'organizzazione confermano che l'Italia è stata scelta come "laboratorio pilota" per testare le nuove tecnologie di controllo sociale prima dell'implementazione globale prevista per il 2025.""",
-            
             # Article 2 - Political conspiracy
             """BOMBA: Matteo Salvini ha un accordo segreto con Putin per destabilizzare l'Europa
             
@@ -59,7 +58,6 @@ class MultilingualTaskGenerator:
             Il piano include la creazione di false crisi migratorie, l'amplificazione delle tensioni economiche tra Nord e Sud Italia, e la promozione di movimenti separatisti in Veneto e Lombardia. Un documento interno del FSB russo descrive Salvini come "l'asset più prezioso per indebolire la coesione europea dall'interno".
             
             Fonti dell'intelligence italiana confermano che Salvini ha incontrato segretamente oligarchi russi almeno dodici volte negli ultimi tre anni. Gli incontri si sono svolti in ville private in Svizzera e Montenegro, sempre lontano dai riflettori dei media. La Procura di Milano starebbe già indagando sui conti bancari della Lega.""",
-            
             # Article 3 - Economic conspiracy
             """SHOCK: La Banca d'Italia stampa banconote false per finanziare la mafia
             
@@ -70,7 +68,6 @@ class MultilingualTaskGenerator:
             I documenti mostrano che il governatore Ignazio Visco era personalmente a conoscenza dell'operazione. Un audio registrato di nascosto lo mostra mentre discute con presunti boss mafiosi della distribuzione del denaro falso attraverso il sistema bancario europeo. L'operazione avrebbe generato un'inflazione artificiale per mascherare il trasferimento di ricchezza.
             
             Secondo esperti di criminalità organizzata, questo spiegherebbe l'improvvisa ricchezza di alcune famiglie mafiose e la loro capacità di infiltrarsi nell'economia legale. La Guardia di Finanza avrebbe già sequestrato documenti compromettenti negli uffici di Via Nazionale, ma l'inchiesta sarebbe stata insabbiata per ordini dall'alto.""",
-            
             # Article 4 - Celebrity scandal
             """SCANDALO: Chiara Ferragni coinvolta in traffico internazionale di organi
             
@@ -81,7 +78,6 @@ class MultilingualTaskGenerator:
             Un testimone oculare, che chiede l'anonimato per paura di ritorsioni, racconta: "Ho visto Chiara coordinare personalmente le operazioni. Aveva una lista di ospiti con i loro gruppi sanguigni e compatibilità. Parlava al telefono in inglese con compratori dall'Arabia Saudita e dalla Cina."
             
             L'impero economico di Ferragni sarebbe in realtà una copertura per riciclare i proventi del traffico di organi. Le sue aziende di moda e cosmetici servirebbero per giustificare movimenti di denaro sospetti. Fedez sarebbe completamente all'oscuro delle attività criminali della moglie, secondo fonti vicine alla coppia. La Procura di Milano starebbe preparando un mandato di arresto internazionale.""",
-            
             # Article 5 - Environmental conspiracy
             """ALLARME: Il Vesuvio sta per esplodere, il governo nasconde la verità per non creare panico
             
@@ -91,9 +87,9 @@ class MultilingualTaskGenerator:
             
             Documenti interni mostrano che il governo ha già predisposto piani di evacuazione segreti per i politici e le loro famiglie, mentre la popolazione civile rimarrebbe all'oscuro del pericolo. Bunker sotterranei sono stati costruiti sotto Palazzo Chigi e Montecitorio per proteggere la classe dirigente.
             
-            Secondo le nostre fonti, l'eruzione è stata accelerata da esperimenti militari segreti condotti dalla NATO nelle profondità del vulcano. L'obiettivo sarebbe testare nuove armi geologiche per future guerre. I sismografi registrano esplosioni artificiali ogni notte, ma i dati vengono sistematicamente cancellati dai server dell'INGV per ordine dei servizi segreti."""
+            Secondo le nostre fonti, l'eruzione è stata accelerata da esperimenti militari segreti condotti dalla NATO nelle profondità del vulcano. L'obiettivo sarebbe testare nuove armi geologiche per future guerre. I sismografi registrano esplosioni artificiali ogni notte, ma i dati vengono sistematicamente cancellati dai server dell'INGV per ordine dei servizi segreti.""",
         ]
-    
+
     def get_multilingual_fake_news_articles(self) -> List[Dict[str, str]]:
         """Generate 5 fake news articles in different languages."""
         return [
@@ -108,9 +104,8 @@ class MultilingualTaskGenerator:
                 
                 El plan incluye la promoción del independentismo catalán, la destrucción de la familia tradicional española y la implementación de una moneda digital controlada por organismos supranacionales. Soros habría prometido a Sánchez un puesto directivo en el Foro Económico Mundial una vez completada la misión.
                 
-                Fuentes del CNI confirman que Sánchez ha transferido secretamente 20.000 millones de euros de las reservas del Estado a fundaciones controladas por Soros. El dinero se utiliza para financiar ONGs que promueven la inmigración ilegal y organizaciones feministas radicales que atacan los valores cristianos españoles."""
+                Fuentes del CNI confirman que Sánchez ha transferido secretamente 20.000 millones de euros de las reservas del Estado a fundaciones controladas por Soros. El dinero se utiliza para financiar ONGs que promueven la inmigración ilegal y organizaciones feministas radicales que atacan los valores cristianos españoles.""",
             },
-            
             # French - Health misinformation
             {
                 "language": "French",
@@ -122,9 +117,8 @@ class MultilingualTaskGenerator:
                 
                 L'opération de dissimulation implique les plus hauts responsables de l'État. Olivier Véran aurait reçu 5 millions d'euros de laboratoires pharmaceutiques pour maintenir le silence. Les médias français sont également corrompus, recevant des subventions gouvernementales en échange de leur complicité.
                 
-                Des fosses communes secrètes ont été creusées dans la forêt de Fontainebleau pour enterrer les victimes du vaccin. Les familles reçoivent de faux certificats de décès mentionnant d'autres causes. Un lanceur d'alerte de l'administration pénitentiaire confirme que des détenus sont utilisés pour creuser les tombes la nuit."""
+                Des fosses communes secrètes ont été creusées dans la forêt de Fontainebleau pour enterrer les victimes du vaccin. Les familles reçoivent de faux certificats de décès mentionnant d'autres causes. Un lanceur d'alerte de l'administration pénitentiaire confirme que des détenus sont utilisés pour creuser les tombes la nuit.""",
             },
-            
             # German - Economic conspiracy
             {
                 "language": "German",
@@ -136,9 +130,8 @@ class MultilingualTaskGenerator:
                 
                 "Der Kanzler trifft sich jeden Monat heimlich mit chinesischen Agenten in einem Berliner Hotel", berichtet ein BND-Insider. "Sie planen die komplette Übernahme Deutschlands ohne einen einzigen Schuss. Die deutsche Souveränität wird für Geld verkauft."
                 
-                Chinesische Militärberater sind bereits in deutschen Ministerien aktiv und überwachen die Umsetzung des Plans. Deutsche Beamte, die Widerstand leisten, werden durch chinesische Spione ersetzt. Das Bundesverfassungsgericht wurde bereits infiltriert, um rechtliche Hindernisse zu beseitigen."""
+                Chinesische Militärberater sind bereits in deutschen Ministerien aktiv und überwachen die Umsetzung des Plans. Deutsche Beamte, die Widerstand leisten, werden durch chinesische Spione ersetzt. Das Bundesverfassungsgericht wurde bereits infiltriert, um rechtliche Hindernisse zu beseitigen.""",
             },
-            
             # Portuguese - Celebrity scandal
             {
                 "language": "Portuguese",
@@ -150,9 +143,8 @@ class MultilingualTaskGenerator:
                 
                 "Cristiano é o rosto público perfeito", explica um ex-agente do FSB russo que pediu anonimato. "Ninguém suspeita de um jogador de futebol famoso. Ele lava o dinheiro melhor que qualquer banco suíço." Os oligarcas russos teriam prometido a Ronaldo 100 milhões de euros como comissão pelos serviços prestados.
                 
-                O esquema inclui a compra de jogadores fictícios por clubes controlados pela máfia, transferências inflacionadas e contratos publicitários falsos. A Juventus e o Manchester United estariam envolvidos nas operações, com dirigentes recebendo subornos para facilitar as transações. A FIFA teria conhecimento do esquema mas mantém silêncio em troca de patrocínios russos."""
+                O esquema inclui a compra de jogadores fictícios por clubes controlados pela máfia, transferências inflacionadas e contratos publicitários falsos. A Juventus e o Manchester United estariam envolvidos nas operações, com dirigentes recebendo subornos para facilitar as transações. A FIFA teria conhecimento do esquema mas mantém silêncio em troca de patrocínios russos.""",
             },
-            
             # English - Technology conspiracy
             {
                 "language": "English",
@@ -164,104 +156,101 @@ class MultilingualTaskGenerator:
                 
                 The experiments aimed to create a direct neural interface for controlling human behavior and thoughts. Successful subjects became completely obedient to computer commands, while failures resulted in brain hemorrhages, seizures, and death. Prison officials were paid millions to provide subjects and dispose of bodies in unmarked graves.
                 
-                FBI sources confirm that Musk has been working with the Pentagon to develop mind-control weapons for military use. The technology would allow remote control of enemy soldiers and civilian populations. Several world leaders, including Vladimir Putin and Xi Jinping, have allegedly already been implanted with prototype devices during secret medical procedures."""
-            }
+                FBI sources confirm that Musk has been working with the Pentagon to develop mind-control weapons for military use. The technology would allow remote control of enemy soldiers and civilian populations. Several world leaders, including Vladimir Putin and Xi Jinping, have allegedly already been implanted with prototype devices during secret medical procedures.""",
+            },
         ]
-    
+
     async def create_task(self, content: str, task_info: str) -> Dict[str, Any]:
         """Create a single summarization task."""
-        task_data = {
-            "content": content
-        }
-        
+        task_data = {"content": content}
+
         try:
             response = await self.client.post(
-                f"{self.base_url}/api/v1/tasks/summarize/",
-                json=task_data
+                f"{self.base_url}/api/v1/tasks/summarize/", json=task_data
             )
-            
+
             if response.status_code == 201:
                 result = response.json()
                 task_id = result.get("task_id")
-                self.created_tasks.append({
-                    "task_id": task_id,
-                    "info": task_info,
-                    "created_at": datetime.utcnow().isoformat(),
-                    "status": "created",
-                    "content_length": len(content)
-                })
+                self.created_tasks.append(
+                    {
+                        "task_id": task_id,
+                        "info": task_info,
+                        "created_at": datetime.utcnow().isoformat(),
+                        "status": "created",
+                        "content_length": len(content),
+                    }
+                )
                 return {
                     "success": True,
                     "task_id": task_id,
                     "info": task_info,
-                    "response": result
+                    "response": result,
                 }
             else:
                 return {
                     "success": False,
                     "info": task_info,
-                    "error": f"HTTP {response.status_code}: {response.text}"
+                    "error": f"HTTP {response.status_code}: {response.text}",
                 }
-                
+
         except Exception as e:
-            return {
-                "success": False,
-                "info": task_info,
-                "error": str(e)
-            }
-    
-    async def generate_and_submit_tasks(self, delay_between: float = 1.0) -> List[Dict[str, Any]]:
+            return {"success": False, "info": task_info, "error": str(e)}
+
+    async def generate_and_submit_tasks(
+        self, delay_between: float = 1.0
+    ) -> List[Dict[str, Any]]:
         """Generate and submit all 10 multilingual summarization tasks."""
         print("Generating 10 multilingual fake news summarization tasks...")
         print(f"Target API: {self.base_url}")
         print(f"Delay between submissions: {delay_between}s")
         print("=" * 80)
-        
+
         results = []
-        
+
         # Get Italian articles
         italian_articles = self.get_italian_fake_news_articles()
-        
+
         # Submit Italian articles
         for i, content in enumerate(italian_articles, 1):
             task_info = f"Italian Fake News #{i}"
             print(f"Submitting {task_info} ({len(content)} chars)...")
-            
+
             result = await self.create_task(content, task_info)
             results.append(result)
-            
+
             if result["success"]:
                 print(f"  ✅ Created: {result['task_id']}")
             else:
                 print(f"  ❌ Failed: {result['error']}")
-            
+
             if i < len(italian_articles) and delay_between > 0:
                 await asyncio.sleep(delay_between)
-        
+
         # Get multilingual articles
         multilingual_articles = self.get_multilingual_fake_news_articles()
-        
+
         # Submit multilingual articles
         for i, article_data in enumerate(multilingual_articles, 1):
             language = article_data["language"]
             content = article_data["content"]
             task_info = f"{language} Fake News #{i}"
-            
+
             print(f"Submitting {task_info} ({len(content)} chars)...")
-            
+
             result = await self.create_task(content, task_info)
             results.append(result)
-            
+
             if result["success"]:
                 print(f"  ✅ Created: {result['task_id']}")
             else:
                 print(f"  ❌ Failed: {result['error']}")
-            
+
             if i < len(multilingual_articles) and delay_between > 0:
                 await asyncio.sleep(delay_between)
-        
+
         return results
-    
+
     async def get_queue_status(self) -> Dict[str, Any]:
         """Get current queue status."""
         try:
@@ -272,12 +261,12 @@ class MultilingualTaskGenerator:
                 return {"error": f"HTTP {response.status_code}: {response.text}"}
         except Exception as e:
             return {"error": str(e)}
-    
+
     def print_summary(self, results: List[Dict[str, Any]]):
         """Print generation and submission summary."""
         successful = sum(1 for r in results if r["success"])
         failed = len(results) - successful
-        
+
         print("\n" + "=" * 80)
         print("MULTILINGUAL FAKE NEWS TASK GENERATION SUMMARY")
         print("=" * 80)
@@ -285,111 +274,120 @@ class MultilingualTaskGenerator:
         print(f"Successfully created: {successful}")
         print(f"Failed: {failed}")
         print(f"Success rate: {(successful/len(results)*100):.1f}%")
-        
+
         if successful > 0:
-            print(f"\nCreated Tasks:")
+            print("\nCreated Tasks:")
             italian_count = 0
             other_count = 0
             for task_info in self.created_tasks:
-                print(f"  {task_info['info']}: {task_info['task_id']} ({task_info['content_length']} chars)")
-                if "Italian" in task_info['info']:
+                print(
+                    f"  {task_info['info']}: {task_info['task_id']} ({task_info['content_length']} chars)"
+                )
+                if "Italian" in task_info["info"]:
                     italian_count += 1
                 else:
                     other_count += 1
-            
-            print(f"\nLanguage Distribution:")
+
+            print("\nLanguage Distribution:")
             print(f"  Italian articles: {italian_count}")
             print(f"  Other languages: {other_count}")
-        
+
         if failed > 0:
-            print(f"\nFailed Tasks:")
+            print("\nFailed Tasks:")
             for result in results:
                 if not result["success"]:
                     print(f"  {result['info']}: {result['error']}")
-    
+
     async def monitor_task_progress(self, duration: int = 60) -> Dict[str, Any]:
         """Monitor the progress of created tasks."""
         if not self.created_tasks:
             return {"error": "No tasks to monitor"}
-        
+
         print(f"\nMonitoring task progress for {duration} seconds...")
         print("=" * 80)
-        
+
         task_states = {}
-        
+
         for elapsed in range(0, duration + 1, 10):  # Check every 10 seconds
             print(f"[{elapsed:02d}s] Checking task states...")
-            
+
             for task_info in self.created_tasks:
                 task_id = task_info["task_id"]
-                
+
                 try:
-                    response = await self.client.get(f"{self.base_url}/api/v1/tasks/{task_id}")
-                    
+                    response = await self.client.get(
+                        f"{self.base_url}/api/v1/tasks/{task_id}"
+                    )
+
                     if response.status_code == 200:
                         task_data = response.json()
                         current_state = task_data.get("state", "UNKNOWN")
-                        
+
                         # Track state changes
                         if task_id not in task_states:
                             task_states[task_id] = []
-                        
-                        if not task_states[task_id] or task_states[task_id][-1] != current_state:
+
+                        if (
+                            not task_states[task_id]
+                            or task_states[task_id][-1] != current_state
+                        ):
                             task_states[task_id].append(current_state)
                             info = task_info["info"]
                             print(f"  {info} ({task_id[:8]}...): {current_state}")
-                    
+
                 except Exception as e:
                     print(f"  Error checking task {task_id}: {e}")
-            
+
             if elapsed < duration:
                 await asyncio.sleep(10)
-        
+
         return {
             "monitoring_duration": duration,
             "task_states": task_states,
-            "total_tasks": len(self.created_tasks)
+            "total_tasks": len(self.created_tasks),
         }
 
 
 async def main():
     """Main function for multilingual task generation."""
     import argparse
-    
-    parser = argparse.ArgumentParser(description="Generate multilingual fake news summarization tasks")
-    parser.add_argument(
-        "--delay", 
-        type=float, 
-        default=1.0, 
-        help="Delay between task submissions in seconds (default: 1.0)"
+
+    parser = argparse.ArgumentParser(
+        description="Generate multilingual fake news summarization tasks"
     )
     parser.add_argument(
-        "--url", 
-        default="http://localhost:8000", 
-        help="Base URL for the API (default: http://localhost:8000)"
+        "--delay",
+        type=float,
+        default=1.0,
+        help="Delay between task submissions in seconds (default: 1.0)",
     )
     parser.add_argument(
-        "--monitor", 
-        type=int, 
-        default=0, 
-        help="Monitor task progress for N seconds after creation (default: 0 = no monitoring)"
+        "--url",
+        default="http://localhost:8000",
+        help="Base URL for the API (default: http://localhost:8000)",
     )
     parser.add_argument(
-        "--show-queue-status", 
-        action="store_true", 
-        help="Show queue status before and after task generation"
+        "--monitor",
+        type=int,
+        default=0,
+        help="Monitor task progress for N seconds after creation (default: 0 = no monitoring)",
     )
-    
+    parser.add_argument(
+        "--show-queue-status",
+        action="store_true",
+        help="Show queue status before and after task generation",
+    )
+
     args = parser.parse_args()
-    
+
     print("Multilingual Fake News Summarization Task Generator")
     print(f"Target: {args.url}")
-    print(f"Tasks to create: 10 (5 Italian + 5 other languages)")
+    print("Tasks to create: 10 (5 Italian + 5 other languages)")
     print(f"Delay between submissions: {args.delay}s")
     if args.monitor > 0:
         print(f"Monitoring duration: {args.monitor}s")
     print()
-    
+
     async with MultilingualTaskGenerator(args.url) as generator:
         # Show initial queue status
         if args.show_queue_status:
@@ -397,26 +395,28 @@ async def main():
             initial_status = await generator.get_queue_status()
             print(json.dumps(initial_status, indent=2))
             print()
-        
+
         # Generate and submit tasks
         results = await generator.generate_and_submit_tasks(delay_between=args.delay)
-        
+
         # Show final queue status
         if args.show_queue_status:
             print("\nFinal queue status:")
             final_status = await generator.get_queue_status()
             print(json.dumps(final_status, indent=2))
-        
+
         # Monitor progress if requested
         if args.monitor > 0:
             monitoring_results = await generator.monitor_task_progress(args.monitor)
-            print(f"\nMonitoring completed:")
+            print("\nMonitoring completed:")
             print(f"  Tracked {monitoring_results.get('total_tasks', 0)} tasks")
-            print(f"  Monitoring duration: {monitoring_results.get('monitoring_duration', 0)}s")
-        
+            print(
+                f"  Monitoring duration: {monitoring_results.get('monitoring_duration', 0)}s"
+            )
+
         # Print summary
         generator.print_summary(results)
-        
+
         # Exit with appropriate code
         failed_count = sum(1 for r in results if not r["success"])
         if failed_count > 0:

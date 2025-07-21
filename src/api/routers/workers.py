@@ -2,7 +2,7 @@
 """Worker management API endpoints."""
 
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Request
 
 from services import health_service
 
@@ -29,7 +29,7 @@ async def get_worker_status(request: Request) -> dict:
     """
     try:
         current_health_service = get_health_service(request)
-        
+
         if not current_health_service:
             return {
                 "error": "Health service not initialized",
@@ -41,41 +41,48 @@ async def get_worker_status(request: Request) -> dict:
         worker_details = []
         try:
             from main import celery_app
-            
+
             # Use broadcast to get health from all active workers
             broadcast_results = celery_app.control.broadcast(
                 "get_worker_health", reply=True, timeout=5.0
             )
-            
+
             if broadcast_results:
                 for result in broadcast_results:
                     if result and isinstance(result, dict):
                         # Extract worker data from nested structure
                         for worker_name, worker_data in result.items():
-                            if isinstance(worker_data, dict) and "worker_id" in worker_data:
+                            if (
+                                isinstance(worker_data, dict)
+                                and "worker_id" in worker_data
+                            ):
                                 # Add worker name for reference
                                 worker_data["worker_name"] = worker_name
-                                
+
                                 # Determine overall worker status based on circuit breaker
-                                cb_state = worker_data.get("circuit_breaker", {}).get("state", "unknown")
+                                cb_state = worker_data.get("circuit_breaker", {}).get(
+                                    "state", "unknown"
+                                )
                                 if cb_state == "open":
                                     worker_data["status"] = "unhealthy"
                                 elif cb_state in ["closed", "half-open"]:
                                     worker_data["status"] = "healthy"
                                 else:
                                     worker_data["status"] = "unknown"
-                                
+
                                 worker_details.append(worker_data)
-        
+
         except Exception as broadcast_error:
             # If broadcast fails, we'll fall back to heartbeat-only method
             print(f"Broadcast failed: {broadcast_error}")
-        
+
         # If we didn't get worker details from broadcast, fall back to heartbeat method
         if not worker_details:
             # Get all heartbeat keys
             heartbeat_keys = []
-            async for key in current_health_service.redis_service.redis.scan_iter("worker:heartbeat:*"):
+            async for key in current_health_service.redis_service.redis.scan_iter(
+                "worker:heartbeat:*"
+            ):
                 heartbeat_keys.append(key)
 
             if not heartbeat_keys:
@@ -87,60 +94,71 @@ async def get_worker_status(request: Request) -> dict:
 
             # Check each heartbeat
             import time
+
             current_time = time.time()
 
             for key in heartbeat_keys:
                 worker_id = key.split(":", 2)[2]  # Extract worker ID from key
                 try:
-                    heartbeat_time = await current_health_service.redis_service.redis.get(key)
+                    heartbeat_time = (
+                        await current_health_service.redis_service.redis.get(key)
+                    )
                     if heartbeat_time:
                         heartbeat_timestamp = float(heartbeat_time)
                         age = current_time - heartbeat_timestamp
-                        is_healthy = age < 60  # Consider healthy if heartbeat within last 60 seconds
-                        
-                        worker_details.append({
-                            "worker_id": worker_id,
-                            "status": "healthy" if is_healthy else "stale",
-                            "last_heartbeat": heartbeat_timestamp,
-                            "heartbeat_age_seconds": round(age, 2),
-                            "circuit_breaker": {
-                                "state": "unknown",
-                                "note": "Circuit breaker status unavailable - worker not responding to broadcast"
+                        is_healthy = (
+                            age < 60
+                        )  # Consider healthy if heartbeat within last 60 seconds
+
+                        worker_details.append(
+                            {
+                                "worker_id": worker_id,
+                                "status": "healthy" if is_healthy else "stale",
+                                "last_heartbeat": heartbeat_timestamp,
+                                "heartbeat_age_seconds": round(age, 2),
+                                "circuit_breaker": {
+                                    "state": "unknown",
+                                    "note": "Circuit breaker status unavailable - worker not responding to broadcast",
+                                },
                             }
-                        })
+                        )
                     else:
-                        worker_details.append({
-                            "worker_id": worker_id,
-                            "status": "no_heartbeat",
-                            "last_heartbeat": None,
-                            "heartbeat_age_seconds": None,
-                            "circuit_breaker": {
-                                "state": "unknown"
+                        worker_details.append(
+                            {
+                                "worker_id": worker_id,
+                                "status": "no_heartbeat",
+                                "last_heartbeat": None,
+                                "heartbeat_age_seconds": None,
+                                "circuit_breaker": {"state": "unknown"},
                             }
-                        })
+                        )
                 except (ValueError, TypeError) as e:
-                    worker_details.append({
-                        "worker_id": worker_id,
-                        "status": "error",
-                        "error": str(e),
-                        "circuit_breaker": {
-                            "state": "unknown"
+                    worker_details.append(
+                        {
+                            "worker_id": worker_id,
+                            "status": "error",
+                            "error": str(e),
+                            "circuit_breaker": {"state": "unknown"},
                         }
-                    })
+                    )
 
         # Calculate summary statistics
         total_workers = len(worker_details)
         healthy_workers = sum(1 for w in worker_details if w.get("status") == "healthy")
         stale_workers = sum(1 for w in worker_details if w.get("status") == "stale")
-        
+
         # Aggregate circuit breaker states
         circuit_breaker_states = {}
         for worker in worker_details:
             cb_state = worker.get("circuit_breaker", {}).get("state", "unknown")
-            circuit_breaker_states[cb_state] = circuit_breaker_states.get(cb_state, 0) + 1
+            circuit_breaker_states[cb_state] = (
+                circuit_breaker_states.get(cb_state, 0) + 1
+            )
 
         return {
-            "overall_status": "healthy" if healthy_workers == total_workers and total_workers > 0 else "degraded",
+            "overall_status": "healthy"
+            if healthy_workers == total_workers and total_workers > 0
+            else "degraded",
             "total_workers": total_workers,
             "healthy_workers": healthy_workers,
             "stale_workers": stale_workers,

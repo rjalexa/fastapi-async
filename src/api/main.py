@@ -84,6 +84,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"❌ Failed to initialize services: {e}")
         import traceback
+
         print(f"Full traceback: {traceback.format_exc()}")
         # Don't raise - let the app start but mark services as unavailable
         services.redis_service = None

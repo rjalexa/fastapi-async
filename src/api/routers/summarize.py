@@ -16,11 +16,11 @@ celery_app: Celery = None
 def get_task_service() -> TaskService:
     """Dependency to get task service from app state."""
     from services import task_service
-    
+
     # Try to get from global first
     if task_service is not None:
         return task_service
-    
+
     # If global is None, raise service unavailable
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -30,8 +30,7 @@ def get_task_service() -> TaskService:
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_summarization_task(
-    task_data: TaskCreate, 
-    task_svc: TaskService = Depends(get_task_service)
+    task_data: TaskCreate, task_svc: TaskService = Depends(get_task_service)
 ) -> TaskResponse:
     """
     Create a new text summarization task.

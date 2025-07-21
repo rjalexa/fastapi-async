@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 import redis.asyncio as aioredis
 
 from schemas import QueueStatus, TaskDetail, QueueName
-from services import queue_service, redis_service
+from services import queue_service
 from config import settings
 
 router = APIRouter(prefix="/api/v1/queues", tags=["queues"])
@@ -28,10 +28,9 @@ async def get_queue_status() -> QueueStatus:
     """
     if not queue_service:
         # Try to get from app state as fallback
-        from fastapi import Request
         from services import QueueService, RedisService
         from config import settings
-        
+
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
@@ -75,12 +74,14 @@ async def get_tasks_in_queue(
         # Try to get from app state as fallback
         from services import QueueService, RedisService
         from config import settings
-        
+
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
             temp_queue_service = QueueService(temp_redis)
-            result = await temp_queue_service.list_tasks_in_queue(queue_name.value, limit)
+            result = await temp_queue_service.list_tasks_in_queue(
+                queue_name.value, limit
+            )
             await temp_redis.close()
             return result
         except Exception as e:
@@ -118,7 +119,7 @@ async def get_dlq_tasks(
         # Try to get from app state as fallback
         from services import QueueService, RedisService
         from config import settings
-        
+
         try:
             # Create a temporary service for this request
             temp_redis = RedisService(settings.redis_url)
@@ -145,23 +146,24 @@ async def get_dlq_tasks(
 async def stream_queue_status():
     """
     Server-Sent Events endpoint for real-time queue status updates.
-    
+
     This endpoint maintains an open connection and streams queue status changes
     in real-time using Redis pub/sub. The frontend can connect to this endpoint
     to receive live updates when tasks are created, completed, or change state.
-    
+
     Returns:
     - Server-Sent Events stream with queue status updates
     """
+
     async def event_generator():
         # Create a dedicated Redis connection for pub/sub
         pubsub_redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         pubsub = pubsub_redis.pubsub()
-        
+
         try:
             # Subscribe to queue updates channel
             await pubsub.subscribe("queue-updates")
-            
+
             # Send initial queue status
             current_queue_service = queue_service
             if not current_queue_service:
@@ -169,7 +171,7 @@ async def stream_queue_status():
                 try:
                     from services import QueueService, RedisService
                     from config import settings as config_settings
-                    
+
                     # Create a temporary service for this request
                     temp_redis = RedisService(config_settings.redis_url)
                     current_queue_service = QueueService(temp_redis)
@@ -177,10 +179,10 @@ async def stream_queue_status():
                     error_data = {
                         "type": "error",
                         "message": f"Queue service not available: {str(e)}",
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": asyncio.get_event_loop().time(),
                     }
                     yield f"data: {json.dumps(error_data)}\n\n"
-            
+
             if current_queue_service:
                 try:
                     initial_status = await current_queue_service.get_queue_status()
@@ -189,23 +191,23 @@ async def stream_queue_status():
                         "queue_depths": initial_status.queues,
                         "state_counts": initial_status.states,
                         "retry_ratio": initial_status.retry_ratio,
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": asyncio.get_event_loop().time(),
                     }
                     yield f"data: {json.dumps(initial_data)}\n\n"
                 except Exception as e:
                     error_data = {
                         "type": "error",
                         "message": f"Failed to get initial status: {str(e)}",
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": asyncio.get_event_loop().time(),
                     }
                     yield f"data: {json.dumps(error_data)}\n\n"
-            
+
             # Listen for updates
             while True:
                 try:
                     # Wait for message with timeout to allow periodic heartbeat
                     message = await asyncio.wait_for(pubsub.get_message(), timeout=30.0)
-                    
+
                     if message and message["type"] == "message":
                         # Forward the update to the client
                         update_data = json.loads(message["data"])
@@ -214,33 +216,33 @@ async def stream_queue_status():
                         # No message received, just continue without sending heartbeat
                         # Heartbeats will be sent only on timeout
                         continue
-                        
+
                 except asyncio.TimeoutError:
                     # Send heartbeat on timeout (every 30 seconds)
                     heartbeat_data = {
-                        "type": "heartbeat", 
-                        "timestamp": asyncio.get_event_loop().time()
+                        "type": "heartbeat",
+                        "timestamp": asyncio.get_event_loop().time(),
                     }
                     yield f"data: {json.dumps(heartbeat_data)}\n\n"
-                    
+
                 except Exception as e:
                     # Send error and continue
                     error_data = {
                         "type": "error",
                         "message": str(e),
-                        "timestamp": asyncio.get_event_loop().time()
+                        "timestamp": asyncio.get_event_loop().time(),
                     }
                     yield f"data: {json.dumps(error_data)}\n\n"
-                    
+
         except Exception as e:
             # Final error before closing
             error_data = {
                 "type": "fatal_error",
                 "message": str(e),
-                "timestamp": asyncio.get_event_loop().time()
+                "timestamp": asyncio.get_event_loop().time(),
             }
             yield f"data: {json.dumps(error_data)}\n\n"
-            
+
         finally:
             # Clean up
             try:
@@ -257,6 +259,6 @@ async def stream_queue_status():
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Cache-Control"
-        }
+            "Access-Control-Allow-Headers": "Cache-Control",
+        },
     )

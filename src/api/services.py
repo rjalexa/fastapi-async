@@ -3,7 +3,6 @@
 
 import json
 import math
-from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -12,7 +11,17 @@ import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
-from schemas import QueueStatus, TaskDetail, TaskState, QueueName, QUEUE_KEY_MAP, TaskListResponse, TaskType
+from schemas import (
+    QueueStatus,
+    TaskDetail,
+    TaskState,
+    QueueName,
+    QUEUE_KEY_MAP,
+    TaskListResponse,
+    TaskSummaryListResponse,
+    TaskSummary,
+    TaskType,
+)
 
 
 class RedisService:
@@ -56,7 +65,9 @@ class RedisService:
             counters[state] = await self.get_state_counter(state)
         return counters
 
-    async def update_state_counters(self, old_state: Optional[str], new_state: str) -> None:
+    async def update_state_counters(
+        self, old_state: Optional[str], new_state: str
+    ) -> None:
         """Atomically update state counters when a task changes state."""
         async with self.redis.pipeline(transaction=True) as pipe:
             if old_state and old_state.lower() != new_state.lower():
@@ -77,10 +88,10 @@ class TaskService:
         self.redis_service = redis_service
 
     async def create_task(
-        self, 
-        content: str, 
+        self,
+        content: str,
         task_type: TaskType = TaskType.SUMMARIZE,
-        metadata: Optional[Dict[str, any]] = None
+        metadata: Optional[Dict[str, any]] = None,
     ) -> str:
         """Create a new task and queue it for processing."""
         task_id = str(uuid4())
@@ -101,9 +112,11 @@ class TaskService:
             "completed_at": "",
             "result": "",
             "error_history": json.dumps([]),
-            "state_history": json.dumps([{"state": TaskState.PENDING.value, "timestamp": now.isoformat()}]),
+            "state_history": json.dumps(
+                [{"state": TaskState.PENDING.value, "timestamp": now.isoformat()}]
+            ),
         }
-        
+
         # Add metadata if provided
         if metadata:
             task_data["metadata"] = json.dumps(metadata)
@@ -120,18 +133,16 @@ class TaskService:
         # Publish queue update for real-time UI
         primary_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
         pending_count = await self.redis_service.get_state_counter("pending")
-        
-        await self.redis_service.publish_queue_update({
-            "type": "task_created",
-            "task_id": task_id,
-            "queue_depths": {
-                "primary": primary_depth
-            },
-            "state_counts": {
-                "pending": pending_count
-            },
-            "timestamp": now.isoformat()
-        })
+
+        await self.redis_service.publish_queue_update(
+            {
+                "type": "task_created",
+                "task_id": task_id,
+                "queue_depths": {"primary": primary_depth},
+                "state_counts": {"pending": pending_count},
+                "timestamp": now.isoformat(),
+            }
+        )
 
         return task_id
 
@@ -196,7 +207,9 @@ class TaskService:
 
         now = datetime.utcnow()
         state_history = json.loads(task_data.get("state_history", "[]"))
-        state_history.append({"state": TaskState.PENDING.value, "timestamp": now.isoformat()})
+        state_history.append(
+            {"state": TaskState.PENDING.value, "timestamp": now.isoformat()}
+        )
 
         # Update task state
         updates = {
@@ -224,19 +237,23 @@ class TaskService:
         try:
             # Get all task IDs from all queues to check what's already queued
             queued_task_ids = set()
-            
+
             # Check primary queue
-            primary_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.PRIMARY], 0, -1)
+            primary_tasks = await self.redis.lrange(
+                QUEUE_KEY_MAP[QueueName.PRIMARY], 0, -1
+            )
             queued_task_ids.update(primary_tasks)
-            
+
             # Check retry queue
             retry_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.RETRY], 0, -1)
             queued_task_ids.update(retry_tasks)
-            
+
             # Check scheduled queue (sorted set)
-            scheduled_tasks = await self.redis.zrange(QUEUE_KEY_MAP[QueueName.SCHEDULED], 0, -1)
+            scheduled_tasks = await self.redis.zrange(
+                QUEUE_KEY_MAP[QueueName.SCHEDULED], 0, -1
+            )
             queued_task_ids.update(scheduled_tasks)
-            
+
             # Check DLQ
             dlq_tasks = await self.redis.lrange(QUEUE_KEY_MAP[QueueName.DLQ], 0, -1)
             queued_task_ids.update(dlq_tasks)
@@ -244,22 +261,29 @@ class TaskService:
             # Scan all task keys to find orphaned ones
             async for key in self.redis.scan_iter("task:*"):
                 task_id = key.split(":", 1)[1]  # Extract task_id from "task:uuid"
-                
+
                 # Get task state
                 task_state = await self.redis.hget(key, "state")
-                
-                if task_state == TaskState.PENDING.value and task_id not in queued_task_ids:
+
+                if (
+                    task_state == TaskState.PENDING.value
+                    and task_id not in queued_task_ids
+                ):
                     found_count += 1
-                    
+
                     try:
                         # Re-queue the orphaned task in primary queue
-                        await self.redis.lpush(QUEUE_KEY_MAP[QueueName.PRIMARY], task_id)
-                        
+                        await self.redis.lpush(
+                            QUEUE_KEY_MAP[QueueName.PRIMARY], task_id
+                        )
+
                         # Update the task's updated_at timestamp
-                        await self.redis.hset(key, "updated_at", datetime.utcnow().isoformat())
-                        
+                        await self.redis.hset(
+                            key, "updated_at", datetime.utcnow().isoformat()
+                        )
+
                         requeued_count += 1
-                        
+
                     except Exception as e:
                         error_msg = f"Failed to requeue task {task_id}: {str(e)}"
                         errors.append(error_msg)
@@ -268,7 +292,7 @@ class TaskService:
                 "found": found_count,
                 "requeued": requeued_count,
                 "errors": errors,
-                "message": f"Found {found_count} orphaned tasks, successfully requeued {requeued_count}"
+                "message": f"Found {found_count} orphaned tasks, successfully requeued {requeued_count}",
             }
 
         except Exception as e:
@@ -277,7 +301,7 @@ class TaskService:
                 "found": found_count,
                 "requeued": requeued_count,
                 "errors": errors,
-                "message": f"Partial completion due to error: {str(e)}"
+                "message": f"Partial completion due to error: {str(e)}",
             }
 
     async def delete_task(self, task_id: str) -> bool:
@@ -287,20 +311,20 @@ class TaskService:
             async with self.redis.pipeline(transaction=True) as pipe:
                 # Delete the main task hash
                 await pipe.delete(f"task:{task_id}")
-                
+
                 # Delete any corresponding dead-letter queue hash
                 await pipe.delete(f"dlq:task:{task_id}")
-                
+
                 # Remove the task_id from all potential list-based queues
                 await pipe.lrem(QUEUE_KEY_MAP[QueueName.PRIMARY], 0, task_id)
                 await pipe.lrem(QUEUE_KEY_MAP[QueueName.RETRY], 0, task_id)
                 await pipe.lrem(QUEUE_KEY_MAP[QueueName.DLQ], 0, task_id)
-                
+
                 # Remove the task_id from the scheduled sorted set
                 await pipe.zrem(QUEUE_KEY_MAP[QueueName.SCHEDULED], task_id)
-                
+
                 await pipe.execute()
-            
+
             return True
         except Exception:
             return False
@@ -308,6 +332,7 @@ class TaskService:
     async def list_tasks(
         self,
         status: Optional[TaskState] = None,
+        task_type: Optional[TaskType] = None,
         queue: Optional[QueueName] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
@@ -331,25 +356,28 @@ class TaskService:
                     total_pages=1,
                     status=exact_task.state,
                 )
-            
+
             # If no exact match, do substring search
             all_tasks = []
             async for key in self.redis.scan_iter("task:*"):
                 task_data = await self.redis.hgetall(key)
-                if task_data and task_id.lower() in task_data.get("task_id", "").lower():
+                if (
+                    task_data
+                    and task_id.lower() in task_data.get("task_id", "").lower()
+                ):
                     all_tasks.append(task_data)
-            
+
             if not all_tasks:
                 return TaskListResponse(
                     tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0
                 )
-            
+
             # Apply other filters to substring matches
             filtered_tasks = []
             for task_data in all_tasks:
                 if status and task_data.get("state") != status.value:
                     continue
-                
+
                 # Safely parse created_at field
                 try:
                     created_at_str = task_data.get("created_at")
@@ -364,10 +392,10 @@ class TaskService:
                     continue
 
                 filtered_tasks.append(task_data)
-            
+
             # Sort and paginate the substring matches
             reverse = sort_order.lower() == "desc"
-            
+
             def sort_key_func(task_data):
                 val = task_data.get(sort_by)
                 if val is None:
@@ -377,7 +405,7 @@ class TaskService:
                         return 0
                     else:
                         return ""
-                
+
                 if isinstance(val, str) and val.isdigit():
                     return int(val)
                 if isinstance(val, str):
@@ -404,7 +432,7 @@ class TaskService:
                 try:
                     error_history = json.loads(task_data.get("error_history", "[]"))
                     state_history = json.loads(task_data.get("state_history", "[]"))
-                    
+
                     created_at = datetime.fromisoformat(task_data["created_at"])
                     updated_at = datetime.fromisoformat(task_data["updated_at"])
                     completed_at = (
@@ -417,7 +445,7 @@ class TaskService:
                         if task_data.get("retry_after")
                         else None
                     )
-                    
+
                     tasks.append(
                         TaskDetail(
                             task_id=task_data["task_id"],
@@ -436,7 +464,7 @@ class TaskService:
                             state_history=state_history,
                         )
                     )
-                except (ValueError, TypeError, KeyError) as e:
+                except (ValueError, TypeError, KeyError):
                     continue
 
             return TaskListResponse(
@@ -465,7 +493,13 @@ class TaskService:
         for task_data in all_tasks:
             if status and task_data.get("state") != status.value:
                 continue
-            
+
+            # Filter by task type
+            if task_type:
+                task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+                if task_type_str != task_type.value:
+                    continue
+
             # Safely parse created_at field
             try:
                 created_at_str = task_data.get("created_at")
@@ -482,8 +516,8 @@ class TaskService:
             # This is a simplified queue filter. A more robust implementation
             # would require storing the queue in the task hash.
             if queue:
-                 # This is a placeholder for more complex queue filtering logic
-                 pass
+                # This is a placeholder for more complex queue filtering logic
+                pass
 
             filtered_tasks.append(task_data)
 
@@ -495,7 +529,7 @@ class TaskService:
 
         # Sorting
         reverse = sort_order.lower() == "desc"
-        
+
         def sort_key_func(task_data):
             val = task_data.get(sort_by)
             if val is None:
@@ -506,7 +540,7 @@ class TaskService:
                     return 0
                 else:
                     return ""
-            
+
             if isinstance(val, str) and val.isdigit():
                 return int(val)
             if isinstance(val, str):
@@ -521,7 +555,6 @@ class TaskService:
         except (TypeError, ValueError) as e:
             raise ValueError(f"Invalid sort key '{sort_by}': {e}")
 
-
         # Pagination
         total_items = len(filtered_tasks)
         total_pages = math.ceil(total_items / page_size)
@@ -534,7 +567,7 @@ class TaskService:
             try:
                 error_history = json.loads(task_data.get("error_history", "[]"))
                 state_history = json.loads(task_data.get("state_history", "[]"))
-                
+
                 # Safely parse datetime fields
                 created_at = datetime.fromisoformat(task_data["created_at"])
                 updated_at = datetime.fromisoformat(task_data["updated_at"])
@@ -548,7 +581,7 @@ class TaskService:
                     if task_data.get("retry_after")
                     else None
                 )
-                
+
                 tasks.append(
                     TaskDetail(
                         task_id=task_data["task_id"],
@@ -567,11 +600,335 @@ class TaskService:
                         state_history=state_history,
                     )
                 )
-            except (ValueError, TypeError, KeyError) as e:
+            except (ValueError, TypeError, KeyError):
                 # Skip tasks with invalid data
                 continue
 
         return TaskListResponse(
+            tasks=tasks,
+            page=page,
+            page_size=page_size,
+            total_items=total_items,
+            total_pages=total_pages,
+            status=status,
+        )
+
+    async def list_task_summaries(
+        self,
+        status: Optional[TaskState] = None,
+        task_type: Optional[TaskType] = None,
+        queue: Optional[QueueName] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        page: int = 1,
+        page_size: int = 20,
+        task_id: Optional[str] = None,
+    ) -> TaskSummaryListResponse:
+        """List task summaries (without content) with filtering, sorting, and pagination."""
+        # If task_id is provided, do substring search instead of exact match
+        if task_id:
+            # First try exact match for backward compatibility
+            exact_task = await self.get_task(task_id)
+            if exact_task:
+                # Convert TaskDetail to TaskSummary
+                task_summary = TaskSummary(
+                    task_id=exact_task.task_id,
+                    state=exact_task.state,
+                    retry_count=exact_task.retry_count,
+                    max_retries=exact_task.max_retries,
+                    last_error=exact_task.last_error,
+                    error_type=exact_task.error_type,
+                    retry_after=exact_task.retry_after,
+                    created_at=exact_task.created_at,
+                    updated_at=exact_task.updated_at,
+                    completed_at=exact_task.completed_at,
+                    task_type=exact_task.task_type,
+                    content_length=len(exact_task.content) if exact_task.content else 0,
+                    has_result=bool(exact_task.result),
+                    error_history=exact_task.error_history,
+                    state_history=exact_task.state_history,
+                )
+                return TaskSummaryListResponse(
+                    tasks=[task_summary],
+                    page=1,
+                    page_size=1,
+                    total_items=1,
+                    total_pages=1,
+                    status=exact_task.state,
+                )
+
+            # If no exact match, do substring search
+            all_tasks = []
+            async for key in self.redis.scan_iter("task:*"):
+                task_data = await self.redis.hgetall(key)
+                if (
+                    task_data
+                    and task_id.lower() in task_data.get("task_id", "").lower()
+                ):
+                    all_tasks.append(task_data)
+
+            if not all_tasks:
+                return TaskSummaryListResponse(
+                    tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0
+                )
+
+            # Apply other filters to substring matches
+            filtered_tasks = []
+            for task_data in all_tasks:
+                if status and task_data.get("state") != status.value:
+                    continue
+
+                # Safely parse created_at field
+                try:
+                    created_at_str = task_data.get("created_at")
+                    if created_at_str:
+                        created_at = datetime.fromisoformat(created_at_str)
+                        if start_date and created_at < start_date:
+                            continue
+                        if end_date and created_at > end_date:
+                            continue
+                except (ValueError, TypeError):
+                    # Skip tasks with invalid created_at format
+                    continue
+
+                filtered_tasks.append(task_data)
+
+            # Sort and paginate the substring matches
+            reverse = sort_order.lower() == "desc"
+
+            def sort_key_func(task_data):
+                val = task_data.get(sort_by)
+                if val is None:
+                    if sort_by in ["created_at", "updated_at", "completed_at"]:
+                        return datetime.min if not reverse else datetime.max
+                    elif sort_by in ["retry_count", "max_retries"]:
+                        return 0
+                    else:
+                        return ""
+
+                if isinstance(val, str) and val.isdigit():
+                    return int(val)
+                if isinstance(val, str):
+                    try:
+                        return datetime.fromisoformat(val)
+                    except ValueError:
+                        return val
+                return val
+
+            try:
+                filtered_tasks.sort(key=sort_key_func, reverse=reverse)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"Invalid sort key '{sort_by}': {e}")
+
+            # Pagination for substring matches
+            total_items = len(filtered_tasks)
+            total_pages = math.ceil(total_items / page_size)
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_data = filtered_tasks[start_index:end_index]
+
+            tasks = []
+            for task_data in paginated_data:
+                try:
+                    error_history = json.loads(task_data.get("error_history", "[]"))
+                    state_history = json.loads(task_data.get("state_history", "[]"))
+
+                    created_at = datetime.fromisoformat(task_data["created_at"])
+                    updated_at = datetime.fromisoformat(task_data["updated_at"])
+                    completed_at = (
+                        datetime.fromisoformat(task_data["completed_at"])
+                        if task_data.get("completed_at")
+                        else None
+                    )
+                    retry_after = (
+                        datetime.fromisoformat(task_data["retry_after"])
+                        if task_data.get("retry_after")
+                        else None
+                    )
+
+                    # Get task type, defaulting to SUMMARIZE for backward compatibility
+                    task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+                    try:
+                        task_type = TaskType(task_type_str)
+                    except ValueError:
+                        task_type = TaskType.SUMMARIZE
+
+                    content = task_data.get("content", "")
+                    result = task_data.get("result", "")
+
+                    tasks.append(
+                        TaskSummary(
+                            task_id=task_data["task_id"],
+                            state=TaskState(task_data["state"]),
+                            retry_count=int(task_data["retry_count"]),
+                            max_retries=int(task_data["max_retries"]),
+                            last_error=task_data.get("last_error") or None,
+                            error_type=task_data.get("error_type") or None,
+                            retry_after=retry_after,
+                            created_at=created_at,
+                            updated_at=updated_at,
+                            completed_at=completed_at,
+                            task_type=task_type,
+                            content_length=len(content) if content else 0,
+                            has_result=bool(result),
+                            error_history=error_history,
+                            state_history=state_history,
+                        )
+                    )
+                except (ValueError, TypeError, KeyError):
+                    continue
+
+            return TaskSummaryListResponse(
+                tasks=tasks,
+                page=page,
+                page_size=page_size,
+                total_items=total_items,
+                total_pages=total_pages,
+                status=status,
+            )
+
+        all_tasks = []
+        async for key in self.redis.scan_iter("task:*"):
+            task_data = await self.redis.hgetall(key)
+            if task_data:
+                all_tasks.append(task_data)
+
+        # If no tasks found, return empty result
+        if not all_tasks:
+            return TaskSummaryListResponse(
+                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0
+            )
+
+        # Filtering
+        filtered_tasks = []
+        for task_data in all_tasks:
+            if status and task_data.get("state") != status.value:
+                continue
+
+            # Filter by task type
+            if task_type:
+                task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+                if task_type_str != task_type.value:
+                    continue
+
+            # Safely parse created_at field
+            try:
+                created_at_str = task_data.get("created_at")
+                if created_at_str:
+                    created_at = datetime.fromisoformat(created_at_str)
+                    if start_date and created_at < start_date:
+                        continue
+                    if end_date and created_at > end_date:
+                        continue
+            except (ValueError, TypeError):
+                # Skip tasks with invalid created_at format
+                continue
+
+            # This is a simplified queue filter. A more robust implementation
+            # would require storing the queue in the task hash.
+            if queue:
+                # This is a placeholder for more complex queue filtering logic
+                pass
+
+            filtered_tasks.append(task_data)
+
+        # If no tasks after filtering, return empty result
+        if not filtered_tasks:
+            return TaskSummaryListResponse(
+                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0
+            )
+
+        # Sorting
+        reverse = sort_order.lower() == "desc"
+
+        def sort_key_func(task_data):
+            val = task_data.get(sort_by)
+            if val is None:
+                # If the field doesn't exist, return a default value for sorting
+                if sort_by in ["created_at", "updated_at", "completed_at"]:
+                    return datetime.min if not reverse else datetime.max
+                elif sort_by in ["retry_count", "max_retries"]:
+                    return 0
+                else:
+                    return ""
+
+            if isinstance(val, str) and val.isdigit():
+                return int(val)
+            if isinstance(val, str):
+                try:
+                    return datetime.fromisoformat(val)
+                except ValueError:
+                    return val
+            return val
+
+        try:
+            filtered_tasks.sort(key=sort_key_func, reverse=reverse)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Invalid sort key '{sort_by}': {e}")
+
+        # Pagination
+        total_items = len(filtered_tasks)
+        total_pages = math.ceil(total_items / page_size)
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_data = filtered_tasks[start_index:end_index]
+
+        tasks = []
+        for task_data in paginated_data:
+            try:
+                error_history = json.loads(task_data.get("error_history", "[]"))
+                state_history = json.loads(task_data.get("state_history", "[]"))
+
+                # Safely parse datetime fields
+                created_at = datetime.fromisoformat(task_data["created_at"])
+                updated_at = datetime.fromisoformat(task_data["updated_at"])
+                completed_at = (
+                    datetime.fromisoformat(task_data["completed_at"])
+                    if task_data.get("completed_at")
+                    else None
+                )
+                retry_after = (
+                    datetime.fromisoformat(task_data["retry_after"])
+                    if task_data.get("retry_after")
+                    else None
+                )
+
+                # Get task type, defaulting to SUMMARIZE for backward compatibility
+                task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
+                try:
+                    task_type = TaskType(task_type_str)
+                except ValueError:
+                    task_type = TaskType.SUMMARIZE
+
+                content = task_data.get("content", "")
+                result = task_data.get("result", "")
+
+                tasks.append(
+                    TaskSummary(
+                        task_id=task_data["task_id"],
+                        state=TaskState(task_data["state"]),
+                        retry_count=int(task_data["retry_count"]),
+                        max_retries=int(task_data["max_retries"]),
+                        last_error=task_data.get("last_error") or None,
+                        error_type=task_data.get("error_type") or None,
+                        retry_after=retry_after,
+                        created_at=created_at,
+                        updated_at=updated_at,
+                        completed_at=completed_at,
+                        task_type=task_type,
+                        content_length=len(content) if content else 0,
+                        has_result=bool(result),
+                        error_history=error_history,
+                        state_history=state_history,
+                    )
+                )
+            except (ValueError, TypeError, KeyError):
+                # Skip tasks with invalid data
+                continue
+
+        return TaskSummaryListResponse(
             tasks=tasks,
             page=page,
             page_size=page_size,
@@ -605,7 +962,7 @@ class QueueService:
 
         # Get task counts by state using efficient counters
         states = await self.redis_service.get_all_state_counters()
-        
+
         # Convert to uppercase keys to match TaskState enum values
         states_upper = {k.upper(): v for k, v in states.items()}
 
@@ -668,7 +1025,7 @@ class QueueService:
             queue_enum = QueueName(queue_name)
         except ValueError:
             return []
-        
+
         queue_key = QUEUE_KEY_MAP.get(queue_enum)
         if not queue_key:
             return []
@@ -693,7 +1050,9 @@ class QueueService:
 class HealthService:
     """Service for health checks."""
 
-    def __init__(self, redis_service: RedisService, celery_app: Optional[Celery] = None):
+    def __init__(
+        self, redis_service: RedisService, celery_app: Optional[Celery] = None
+    ):
         self.redis_service = redis_service
         self.celery_app = celery_app
 
@@ -726,28 +1085,31 @@ class HealthService:
             heartbeat_keys = []
             async for key in self.redis_service.redis.scan_iter("worker:heartbeat:*"):
                 heartbeat_keys.append(key)
-            
+
             if not heartbeat_keys:
                 # No heartbeat keys found - workers might not be running
                 return False
-            
+
             # Check if any heartbeat is recent (within last 60 seconds)
             import time
+
             current_time = time.time()
             recent_heartbeats = 0
-            
+
             for key in heartbeat_keys:
                 try:
                     heartbeat_time = await self.redis_service.redis.get(key)
                     if heartbeat_time:
                         heartbeat_timestamp = float(heartbeat_time)
-                        if current_time - heartbeat_timestamp < 60:  # Within last 60 seconds
+                        if (
+                            current_time - heartbeat_timestamp < 60
+                        ):  # Within last 60 seconds
                             recent_heartbeats += 1
                 except (ValueError, TypeError):
                     continue
-            
+
             return recent_heartbeats > 0
-            
+
         except Exception:
             # If we can't check heartbeats, fall back to checking if queues are being processed
             return await self._check_queue_activity()
@@ -763,38 +1125,47 @@ class HealthService:
                     active_count += 1
                     if active_count > 0:  # Found at least one active task
                         return True
-            
+
             # If no active tasks, check if we have any completed tasks recently
             # This indicates workers were active recently
             recent_completions = 0
             import time
+
             current_time = time.time()
-            
+
             async for key in self.redis_service.redis.scan_iter("task:*"):
                 completed_at = await self.redis_service.redis.hget(key, "completed_at")
                 if completed_at:
                     try:
-                        completed_timestamp = datetime.fromisoformat(completed_at).timestamp()
-                        if current_time - completed_timestamp < 300:  # Within last 5 minutes
+                        completed_timestamp = datetime.fromisoformat(
+                            completed_at
+                        ).timestamp()
+                        if (
+                            current_time - completed_timestamp < 300
+                        ):  # Within last 5 minutes
                             recent_completions += 1
                             if recent_completions > 0:
                                 return True
                     except (ValueError, TypeError):
                         continue
-            
+
             # If we have pending tasks but no recent activity, workers might be down
             pending_count = 0
-            pending_count += await self.redis_service.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
-            pending_count += await self.redis_service.redis.llen(QUEUE_KEY_MAP[QueueName.RETRY])
-            
+            pending_count += await self.redis_service.redis.llen(
+                QUEUE_KEY_MAP[QueueName.PRIMARY]
+            )
+            pending_count += await self.redis_service.redis.llen(
+                QUEUE_KEY_MAP[QueueName.RETRY]
+            )
+
             # If there are pending tasks but no recent activity, workers are likely down
             if pending_count > 0:
                 return False
-            
+
             # No pending tasks and no recent activity - this could be normal (no work to do)
             # In this case, we'll assume workers are healthy
             return True
-            
+
         except Exception:
             # If all checks fail, assume workers are down
             return False

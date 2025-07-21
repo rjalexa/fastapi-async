@@ -12,23 +12,19 @@ import io
 import json
 import os
 import random
-import tempfile
 import time
 from datetime import datetime
-from typing import List
 
 import redis.asyncio as aioredis
 from celery import Celery, Task
 from celery.worker.control import Panel
 from pdf2image import convert_from_bytes
-from PIL import Image
 
 from circuit_breaker import (
     call_openrouter_api,
     get_circuit_breaker_status,
     reset_circuit_breaker,
     open_circuit_breaker,
-    openrouter_breaker,
 )
 from config import settings
 from prompts import load_prompt
@@ -69,7 +65,12 @@ ERROR_CLASSIFICATIONS = {
 
 RETRY_SCHEDULES = {
     "InsufficientCredits": [300, 600, 1800],  # 5min, 10min, 30min
-    "RateLimitError": [120, 300, 600, 1200],  # 2min, 5min, 10min, 20min - longer delays for rate limits
+    "RateLimitError": [
+        120,
+        300,
+        600,
+        1200,
+    ],  # 2min, 5min, 10min, 20min - longer delays for rate limits
     "ServiceUnavailable": [5, 10, 30, 60, 120],
     "NetworkTimeout": [2, 5, 10, 30, 60],
     "Default": [5, 15, 60, 300],
@@ -220,7 +221,7 @@ async def update_task_state(
     if "last_error" in kwargs and kwargs["last_error"]:
         # Get existing data
         existing_data = await redis_conn.hgetall(f"task:{task_id}")
-        
+
         # Handle error history
         error_history = []
         if existing_data.get("error_history"):
@@ -228,18 +229,18 @@ async def update_task_state(
                 error_history = json.loads(existing_data["error_history"])
             except (json.JSONDecodeError, TypeError):
                 error_history = []
-        
+
         # Add new error to history
         error_entry = {
             "timestamp": current_time,
             "error": kwargs["last_error"],
             "error_type": kwargs.get("error_type", "Unknown"),
             "retry_count": kwargs.get("retry_count", 0),
-            "state_transition": f"{existing_data.get('state', 'UNKNOWN')} -> {state}"
+            "state_transition": f"{existing_data.get('state', 'UNKNOWN')} -> {state}",
         }
         error_history.append(error_entry)
         fields["error_history"] = json.dumps(error_history)
-        
+
         # Handle retry timestamps - track each retry attempt
         if state == "SCHEDULED":  # This is a retry being scheduled
             retry_timestamps = []
@@ -248,17 +249,17 @@ async def update_task_state(
                     retry_timestamps = json.loads(existing_data["retry_timestamps"])
                 except (json.JSONDecodeError, TypeError):
                     retry_timestamps = []
-            
+
             retry_entry = {
                 "retry_number": kwargs.get("retry_count", 0),
                 "scheduled_at": current_time,
                 "retry_after": kwargs.get("retry_after"),
                 "error_type": kwargs.get("error_type", "Unknown"),
-                "delay_seconds": None  # Will be calculated when actually retried
+                "delay_seconds": None,  # Will be calculated when actually retried
             }
             retry_timestamps.append(retry_entry)
             fields["retry_timestamps"] = json.dumps(retry_timestamps)
-    
+
     # Track when a retry actually starts (PENDING -> ACTIVE transition)
     if state == "ACTIVE":
         existing_data = await redis_conn.hgetall(f"task:{task_id}")
@@ -272,9 +273,15 @@ async def update_task_state(
                         latest_retry["actual_start_at"] = current_time
                         # Calculate actual delay
                         if latest_retry.get("scheduled_at"):
-                            scheduled_time = datetime.fromisoformat(latest_retry["scheduled_at"].replace('Z', '+00:00'))
-                            actual_time = datetime.fromisoformat(current_time.replace('Z', '+00:00'))
-                            delay_seconds = (actual_time - scheduled_time).total_seconds()
+                            scheduled_time = datetime.fromisoformat(
+                                latest_retry["scheduled_at"].replace("Z", "+00:00")
+                            )
+                            actual_time = datetime.fromisoformat(
+                                current_time.replace("Z", "+00:00")
+                            )
+                            delay_seconds = (
+                                actual_time - scheduled_time
+                            ).total_seconds()
                             latest_retry["delay_seconds"] = delay_seconds
                         fields["retry_timestamps"] = json.dumps(retry_timestamps)
             except (json.JSONDecodeError, TypeError, ValueError):
@@ -282,7 +289,9 @@ async def update_task_state(
 
     # Serialize complex types
     for key, value in fields.items():
-        if isinstance(value, (dict, list)) and key != "error_history":  # error_history already serialized
+        if (
+            isinstance(value, (dict, list)) and key != "error_history"
+        ):  # error_history already serialized
             fields[key] = json.dumps(value)
         elif value is not None:
             fields[key] = str(value)
@@ -291,12 +300,12 @@ async def update_task_state(
     async with redis_conn.pipeline(transaction=True) as pipe:
         # Update task data
         await pipe.hset(f"task:{task_id}", mapping=fields)
-        
+
         # Update state counters
         if old_state and old_state.lower() != state.lower():
             await pipe.decrby(f"metrics:tasks:state:{old_state.lower()}", 1)
         await pipe.incrby(f"metrics:tasks:state:{state.lower()}", 1)
-        
+
         await pipe.execute()
 
     # Publish real-time update
@@ -307,13 +316,13 @@ async def update_task_state(
         queue_depths["retry"] = await redis_conn.llen("tasks:pending:retry")
         queue_depths["scheduled"] = await redis_conn.zcard("tasks:scheduled")
         queue_depths["dlq"] = await redis_conn.llen("dlq:tasks")
-        
+
         # Get current state counts
         state_counts = {}
         for state_name in ["pending", "active", "completed", "failed", "dlq"]:
             count = await redis_conn.get(f"metrics:tasks:state:{state_name}")
             state_counts[state_name.upper()] = int(count) if count else 0
-        
+
         # Publish update
         update_data = {
             "type": "task_state_changed",
@@ -322,11 +331,11 @@ async def update_task_state(
             "new_state": state,
             "queue_depths": queue_depths,
             "state_counts": state_counts,
-            "timestamp": current_time
+            "timestamp": current_time,
         }
-        
+
         await redis_conn.publish("queue-updates", json.dumps(update_data))
-        
+
     except Exception as e:
         # Don't fail the task update if publishing fails
         print(f"Warning: Failed to publish queue update: {e}")
@@ -371,20 +380,20 @@ async def summarize_text_with_pybreaker(content: str) -> str:
     """Summarize text via OpenRouter protected by a circuit breaker."""
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
-    
+
     try:
         # Load the system prompt (no formatting needed - it's the complete system message)
         system_prompt = load_prompt("summarize")
-        
+
         # Create the messages payload for the API with system and user roles
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Summarize this text: {content}"}
+            {"role": "user", "content": f"Summarize this text: {content}"},
         ]
-        
+
         # Call the generic OpenRouter API function
         return await call_openrouter_api(messages)
-        
+
     except (FileNotFoundError, ValueError) as e:
         # Prompt loading/formatting errors are permanent
         raise PermanentError(f"Prompt error: {str(e)}")
@@ -410,55 +419,57 @@ async def summarize_text_with_pybreaker(content: str) -> str:
             raise exc
 
 
-async def extract_pdf_with_pybreaker(pdf_content_b64: str, filename: str, issue_date: str = None) -> str:
+async def extract_pdf_with_pybreaker(
+    pdf_content_b64: str, filename: str, issue_date: str = None
+) -> str:
     """Extract articles from PDF pages via OpenRouter protected by a circuit breaker."""
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
-    
+
     try:
         # Decode base64 PDF content
         pdf_bytes = base64.b64decode(pdf_content_b64)
-        
+
         # Convert PDF to images
-        pages = convert_from_bytes(pdf_bytes, dpi=300, fmt='PNG')
-        
+        pages = convert_from_bytes(pdf_bytes, dpi=300, fmt="PNG")
+
         # Load the PDF extraction prompt
         system_prompt = load_prompt("pdfxtract")
-        
+
         # Process each page
         all_pages_data = []
-        
+
         for page_num, page_image in enumerate(pages, 1):
             try:
                 # Convert PIL Image to base64 for API
                 img_buffer = io.BytesIO()
-                page_image.save(img_buffer, format='PNG')
-                img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-                
+                page_image.save(img_buffer, format="PNG")
+                img_base64 = base64.b64encode(img_buffer.getvalue()).decode("utf-8")
+
                 # Create the messages payload for the API with system and user roles
                 user_content = f"Analyze this newspaper page image. Filename: {filename}, Page number: {page_num}"
                 if issue_date:
                     user_content += f", Issue date: {issue_date}"
-                
+
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {
-                        "role": "user", 
+                        "role": "user",
                         "content": [
                             {"type": "text", "text": user_content},
                             {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/png;base64,{img_base64}"
-                                }
-                            }
-                        ]
-                    }
+                                },
+                            },
+                        ],
+                    },
                 ]
-                
+
                 # Call the OpenRouter API for this page
                 page_result = await call_openrouter_api(messages)
-                
+
                 # Parse the JSON response
                 try:
                     page_data = json.loads(page_result)
@@ -467,39 +478,45 @@ async def extract_pdf_with_pybreaker(pdf_content_b64: str, filename: str, issue_
                         all_pages_data.extend(page_data["pages"])
                     else:
                         # If no pages array, create a skipped page entry
-                        all_pages_data.append({
-                            "page_number": page_num,
-                            "status": "skipped",
-                            "reason": "No valid page data returned from LLM",
-                            "articles": []
-                        })
+                        all_pages_data.append(
+                            {
+                                "page_number": page_num,
+                                "status": "skipped",
+                                "reason": "No valid page data returned from LLM",
+                                "articles": [],
+                            }
+                        )
                 except json.JSONDecodeError as e:
                     # If JSON parsing fails, create a skipped page entry
-                    all_pages_data.append({
-                        "page_number": page_num,
-                        "status": "skipped",
-                        "reason": f"JSON parsing failed: {str(e)}",
-                        "articles": []
-                    })
-                    
+                    all_pages_data.append(
+                        {
+                            "page_number": page_num,
+                            "status": "skipped",
+                            "reason": f"JSON parsing failed: {str(e)}",
+                            "articles": [],
+                        }
+                    )
+
             except Exception as e:
                 # If page processing fails, create a skipped page entry
-                all_pages_data.append({
-                    "page_number": page_num,
-                    "status": "skipped",
-                    "reason": f"Page processing failed: {str(e)}",
-                    "articles": []
-                })
-        
+                all_pages_data.append(
+                    {
+                        "page_number": page_num,
+                        "status": "skipped",
+                        "reason": f"Page processing failed: {str(e)}",
+                        "articles": [],
+                    }
+                )
+
         # Create the final document structure
         final_result = {
             "filename": filename,
             "issue_date": issue_date or "unknown",
-            "pages": all_pages_data
+            "pages": all_pages_data,
         }
-        
+
         return json.dumps(final_result, ensure_ascii=False, indent=2)
-        
+
     except (FileNotFoundError, ValueError) as e:
         # Prompt loading/formatting errors are permanent
         raise PermanentError(f"PDF extraction error: {str(e)}")
@@ -548,14 +565,14 @@ def process_task(self: Task, task_id: str) -> str:
     async def _run_task():
         # Update heartbeat at start of task
         await update_worker_heartbeat(redis_conn, worker_id)
-        
+
         data = await redis_conn.hgetall(f"task:{task_id}")
         if not data:
             raise PermanentError(f"Task {task_id} not found in Redis.")
 
         content = data.get("content", "")
         task_type = data.get("task_type", "summarize")
-        
+
         if not content:
             raise PermanentError("No content to process.")
 
@@ -563,9 +580,7 @@ def process_task(self: Task, task_id: str) -> str:
         if retry_count >= settings.max_retries:
             raise PermanentError(f"Max retries ({settings.max_retries}) exceeded.")
 
-        await update_task_state(
-            redis_conn, task_id, "ACTIVE", worker_id=worker_id
-        )
+        await update_task_state(redis_conn, task_id, "ACTIVE", worker_id=worker_id)
 
         # Process based on task type
         if task_type == "pdfxtract":
@@ -576,10 +591,10 @@ def process_task(self: Task, task_id: str) -> str:
                     metadata = json.loads(data["metadata"])
                 except json.JSONDecodeError:
                     metadata = {}
-            
+
             filename = metadata.get("filename", "unknown.pdf")
             issue_date = metadata.get("issue_date")
-            
+
             result = await extract_pdf_with_pybreaker(content, filename, issue_date)
         else:
             # Default to summarization
@@ -592,10 +607,10 @@ def process_task(self: Task, task_id: str) -> str:
             result=result,
             completed_at=datetime.utcnow().isoformat(),
         )
-        
+
         # Update heartbeat at end of task
         await update_worker_heartbeat(redis_conn, worker_id)
-        
+
         return f"Task {task_id} ({task_type}) completed successfully."
 
     try:
@@ -677,22 +692,22 @@ def consume_tasks(self: Task) -> str:
     """
     import logging
     import redis
-    
+
     logger = logging.getLogger(__name__)
     logger.info(f"Starting task consumer on worker {self.request.hostname}")
-    
+
     # Use synchronous Redis for BLPOP
     redis_conn = redis.from_url(settings.redis_url, decode_responses=True)
-    
+
     processed_count = 0
-    
+
     try:
         while True:
             try:
                 # Get current retry queue depth for adaptive ratio
                 retry_depth = redis_conn.llen("tasks:pending:retry")
                 retry_ratio = calculate_adaptive_retry_ratio(retry_depth)
-                
+
                 # Decide which queue to check first based on retry ratio
                 if random.random() > retry_ratio:
                     # Try primary queue first (70% of the time by default)
@@ -700,38 +715,40 @@ def consume_tasks(self: Task) -> str:
                 else:
                     # Try retry queue first (30% of the time by default)
                     queues = ["tasks:pending:retry", "tasks:pending:primary"]
-                
+
                 # Use BLPOP to wait for a task ID from either queue (timeout: 5 seconds)
                 result = redis_conn.blpop(queues, timeout=5)
-                
+
                 if result is None:
                     # Timeout occurred, continue loop (this is normal)
                     continue
-                
+
                 queue_name, task_id = result
                 logger.info(f"Received task {task_id} from {queue_name}")
-                
+
                 # Remove task from the queue it came from (already done by BLPOP)
                 # Now trigger the actual task processing
                 process_task.delay(task_id)
-                
+
                 processed_count += 1
-                logger.info(f"Dispatched task {task_id} for processing (total: {processed_count})")
-                
+                logger.info(
+                    f"Dispatched task {task_id} for processing (total: {processed_count})"
+                )
+
             except redis.RedisError as e:
                 logger.error(f"Redis error in consumer: {e}")
                 time.sleep(5)  # Wait before retrying
                 continue
-                
+
             except Exception as e:
                 logger.error(f"Unexpected error in consumer: {e}")
                 time.sleep(1)  # Brief pause before continuing
                 continue
-                
+
     except KeyboardInterrupt:
         logger.info("Consumer task interrupted, shutting down gracefully")
         return f"Consumer stopped after processing {processed_count} tasks"
-    
+
     except Exception as e:
         logger.error(f"Consumer task failed: {e}")
         raise

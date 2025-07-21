@@ -62,8 +62,6 @@ async def health_check(request: Request) -> HealthStatus:
         )
 
 
-
-
 @router.get("/live")
 async def liveness_check() -> dict:
     """
