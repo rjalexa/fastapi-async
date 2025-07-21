@@ -12,6 +12,7 @@ x-worker-common: &worker-common
       condition: service_healthy
   volumes:
     - ./src/worker:/app
+    - ./prompts:/app/prompts
   user: "1000:1000"
   restart: unless-stopped
   deploy:

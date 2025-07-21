@@ -20,10 +20,18 @@ def load_prompt(prompt_name: str) -> str:
         FileNotFoundError: If the prompt file doesn't exist
         IOError: If there's an error reading the file
     """
-    # Get the project root directory (assuming we're in src/worker/)
+    # In Docker container, prompts are mounted at /app/prompts/
+    # In local development, calculate relative to project root
     current_dir = Path(__file__).parent
-    project_root = current_dir.parent.parent
-    prompt_file = project_root / "prompts" / f"{prompt_name}.txt"
+    
+    # Check if we're in a Docker container (prompts mounted at /app/prompts/)
+    docker_prompts_path = Path("/app/prompts")
+    if docker_prompts_path.exists():
+        prompt_file = docker_prompts_path / f"{prompt_name}.txt"
+    else:
+        # Local development: assume we're in src/worker/ and go up to project root
+        project_root = current_dir.parent.parent
+        prompt_file = project_root / "prompts" / f"{prompt_name}.txt"
 
     if not prompt_file.exists():
         raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
