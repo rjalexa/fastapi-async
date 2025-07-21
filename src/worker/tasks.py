@@ -28,6 +28,12 @@ from circuit_breaker import (
 )
 from config import settings
 from prompts import load_prompt
+from redis_config import (
+    get_worker_standard_redis,
+    get_worker_task_redis,
+    initialize_worker_redis,
+    close_worker_redis
+)
 
 # --- Custom Exceptions ----------------------------------------------------
 
@@ -162,9 +168,13 @@ def open_worker_circuit_breaker(panel, **kwargs):
 # --- Async Redis and State Management Helpers -----------------------------
 
 
-def get_async_redis_connection() -> aioredis.Redis:
-    """Get an async Redis connection."""
-    return aioredis.from_url(settings.redis_url, decode_responses=True)
+async def get_async_redis_connection() -> aioredis.Redis:
+    """Get an optimized async Redis connection."""
+    try:
+        return await get_worker_standard_redis()
+    except RuntimeError:
+        # Fallback to direct connection if worker Redis not initialized
+        return aioredis.from_url(settings.redis_url, decode_responses=True)
 
 
 def classify_error(status_code: int, error_message: str) -> str:
@@ -558,11 +568,13 @@ def process_task(self: Task, task_id: str) -> str:
     Main task processor that handles different task types.
     `bind=True` provides access to the task instance via `self`.
     """
-    redis_conn = get_async_redis_connection()
     retry_count = self.request.retries  # Use Celery's built-in retry counter
     worker_id = f"celery-{self.request.hostname}-{os.getpid()}"
 
     async def _run_task():
+        # Get optimized Redis connection
+        redis_conn = await get_async_redis_connection()
+        
         # Update heartbeat at start of task
         await update_worker_heartbeat(redis_conn, worker_id)
 
@@ -613,20 +625,26 @@ def process_task(self: Task, task_id: str) -> str:
 
         return f"Task {task_id} ({task_type}) completed successfully."
 
+    async def _handle_error(exc, error_type="TransientError"):
+        """Handle task errors with proper Redis connection."""
+        redis_conn = await get_async_redis_connection()
+        if error_type == "PermanentError":
+            await move_to_dlq(redis_conn, task_id, str(exc), "PermanentError")
+            return f"Task {task_id} moved to DLQ: {exc}"
+        else:
+            await schedule_task_for_retry(redis_conn, task_id, retry_count, exc)
+            return f"Task {task_id} failed, scheduled for retry."
+
     try:
         return asyncio.run(_run_task())
     except PermanentError as e:
-        asyncio.run(move_to_dlq(redis_conn, task_id, str(e), "PermanentError"))
-        return f"Task {task_id} moved to DLQ: {e}"
+        return asyncio.run(_handle_error(e, "PermanentError"))
     except TransientError as e:
-        # Schedule for retry and let the task complete. The beat task will requeue it.
-        asyncio.run(schedule_task_for_retry(redis_conn, task_id, retry_count, e))
-        return f"Task {task_id} failed, scheduled for retry."
+        return asyncio.run(_handle_error(e, "TransientError"))
     except Exception as e:
         # Catch any other unexpected errors and treat them as transient
         exc = TransientError(f"An unexpected error occurred: {str(e)}")
-        asyncio.run(schedule_task_for_retry(redis_conn, task_id, retry_count, exc))
-        return f"Task {task_id} failed with unexpected error, scheduled for retry."
+        return asyncio.run(_handle_error(exc, "TransientError"))
 
 
 # Keep the old summarize_task for backward compatibility
@@ -644,9 +662,10 @@ def process_scheduled_tasks() -> str:
     """
     Periodically run by Celery Beat to move scheduled tasks back to the pending queue.
     """
-    redis_conn = get_async_redis_connection()
-
     async def _run_processing():
+        # Get optimized Redis connection
+        redis_conn = await get_async_redis_connection()
+        
         now = time.time()
         # Get up to 100 tasks that are due to be retried
         due_tasks = await redis_conn.zrangebyscore(

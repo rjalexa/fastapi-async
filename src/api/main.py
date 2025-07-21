@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import health, tasks, queues, summarize, workers, pdfxtract
+from routers import health, tasks, queues, summarize, workers, pdfxtract, redis
 from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
@@ -37,14 +37,19 @@ async def initialize_services() -> tuple:
     """Initialize all services and return them."""
     print(f"Initializing services in process {os.getpid()}")
 
-    # Initialize Redis service
+    # Initialize Redis service with optimized connection pool
     redis_service = RedisService(settings.redis_url)
+    await redis_service.initialize()
 
     # Test Redis connection
     redis_ok = await redis_service.ping()
     print(f"Redis connection: {'OK' if redis_ok else 'FAILED'}")
-
-    if not redis_ok:
+    
+    if redis_ok:
+        # Log connection pool stats
+        pool_stats = await redis_service.get_pool_stats()
+        print(f"Redis pool initialized: {pool_stats}")
+    else:
         print("⚠️  Redis connection failed, but continuing...")
 
     # Initialize other services
@@ -131,6 +136,7 @@ app.include_router(health.router)
 app.include_router(tasks.router)
 app.include_router(queues.router)
 app.include_router(workers.router)
+app.include_router(redis.router)  # Redis monitoring endpoints
 
 
 @app.get("/")

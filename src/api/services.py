@@ -11,6 +11,13 @@ import redis.asyncio as redis
 from celery import Celery
 
 from config import settings
+from redis_config import (
+    get_standard_redis,
+    get_pipeline_redis,
+    get_redis_manager,
+    initialize_redis,
+    close_redis
+)
 from schemas import (
     QueueStatus,
     TaskDetail,
@@ -25,22 +32,41 @@ from schemas import (
 
 
 class RedisService:
-    """Redis service for task and queue management."""
+    """Redis service for task and queue management with optimized connection pool."""
 
     def __init__(self, redis_url: str):
-        self.redis = redis.from_url(redis_url, decode_responses=True)
+        self.redis_url = redis_url
+        self._manager = None
+        self.redis = None
+
+    async def initialize(self):
+        """Initialize the optimized Redis connection manager."""
+        if self._manager is None:
+            self._manager = await initialize_redis(self.redis_url)
+            self.redis = await get_standard_redis()
 
     async def close(self):
         """Close Redis connection."""
-        await self.redis.close()
+        if self._manager:
+            await close_redis()
+            self._manager = None
+            self.redis = None
 
     async def ping(self) -> bool:
         """Check Redis connectivity."""
         try:
+            if self.redis is None:
+                await self.initialize()
             await self.redis.ping()
             return True
         except Exception:
             return False
+
+    async def get_pool_stats(self) -> dict:
+        """Get Redis connection pool statistics."""
+        if self._manager:
+            return await self._manager.get_pool_stats()
+        return {"status": "not_initialized"}
 
     async def increment_state_counter(self, state: str, amount: int = 1) -> int:
         """Increment a task state counter."""
