@@ -111,38 +111,6 @@ class RedisService:
             return await self._simple_manager.get_pool_stats()
         return {"status": "not_initialized"}
 
-    async def increment_state_counter(self, state: str, amount: int = 1) -> int:
-        """Increment a task state counter."""
-        key = f"metrics:tasks:state:{state.lower()}"
-        return await self.redis.incrby(key, amount)
-
-    async def decrement_state_counter(self, state: str, amount: int = 1) -> int:
-        """Decrement a task state counter."""
-        key = f"metrics:tasks:state:{state.lower()}"
-        return await self.redis.decrby(key, amount)
-
-    async def get_state_counter(self, state: str) -> int:
-        """Get current value of a task state counter."""
-        key = f"metrics:tasks:state:{state.lower()}"
-        value = await self.redis.get(key)
-        return int(value) if value else 0
-
-    async def get_all_state_counters(self) -> Dict[str, int]:
-        """Get all task state counters."""
-        counters = {}
-        for state in ["pending", "active", "completed", "failed", "scheduled", "dlq"]:
-            counters[state] = await self.get_state_counter(state)
-        return counters
-
-    async def update_state_counters(
-        self, old_state: Optional[str], new_state: str
-    ) -> None:
-        """Atomically update state counters when a task changes state."""
-        async with self.redis.pipeline(transaction=True) as pipe:
-            if old_state and old_state.lower() != new_state.lower():
-                await pipe.decrby(f"metrics:tasks:state:{old_state.lower()}", 1)
-            await pipe.incrby(f"metrics:tasks:state:{new_state.lower()}", 1)
-            await pipe.execute()
 
     async def publish_queue_update(self, update_data: Dict) -> None:
         """Publish queue update to Redis pub/sub channel."""
@@ -195,20 +163,16 @@ class TaskService:
             # Store task metadata and queue in primary queue atomically
             await pipe.hset(f"task:{task_id}", mapping=task_data)
             await pipe.lpush(QUEUE_KEY_MAP[QueueName.PRIMARY], task_id)
-            # Increment pending counter
-            await pipe.incrby("metrics:tasks:state:pending", 1)
             await pipe.execute()
 
         # Publish queue update for real-time UI
         primary_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
-        pending_count = await self.redis_service.get_state_counter("pending")
 
         await self.redis_service.publish_queue_update(
             {
                 "type": "task_created",
                 "task_id": task_id,
                 "queue_depths": {"primary": primary_depth},
-                "state_counts": {"pending": pending_count},
                 "timestamp": now.isoformat(),
             }
         )
@@ -398,10 +362,6 @@ class TaskService:
 
                 # Remove the task_id from the scheduled sorted set
                 await pipe.zrem(QUEUE_KEY_MAP[QueueName.SCHEDULED], task_id)
-
-                # Decrement the state counter for the task's current state
-                if current_state:
-                    await pipe.decrby(f"metrics:tasks:state:{current_state.lower()}", 1)
 
                 await pipe.execute()
 
@@ -1134,7 +1094,7 @@ class QueueService:
         self.redis_service = redis_service
 
     async def get_queue_status(self) -> QueueStatus:
-        """Get comprehensive queue status using efficient counters."""
+        """Get comprehensive queue status with coherent counts."""
         # Get queue depths using centralized key mapping
         primary_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.PRIMARY])
         retry_depth = await self.redis.llen(QUEUE_KEY_MAP[QueueName.RETRY])
@@ -1148,16 +1108,31 @@ class QueueService:
             QueueName.DLQ.value: dlq_depth,
         }
 
-        # Get task counts by state using efficient counters
-        states = await self.redis_service.get_all_state_counters()
+        # Get task counts by state by scanning actual tasks for coherence
+        # This ensures the state counts match the actual task states in Redis
+        states = {
+            "PENDING": 0,
+            "ACTIVE": 0,
+            "COMPLETED": 0,
+            "FAILED": 0,
+            "SCHEDULED": 0,
+            "DLQ": 0,
+        }
 
-        # Convert to uppercase keys to match TaskState enum values
-        states_upper = {k.upper(): v for k, v in states.items()}
+        # Count tasks by their actual state
+        async for key in self.redis.scan_iter("task:*"):
+            try:
+                state = await self.redis.hget(key, "state")
+                if state and state in states:
+                    states[state] += 1
+            except Exception:
+                # Skip corrupted tasks
+                continue
 
         # Calculate adaptive retry ratio
         retry_ratio = self._calculate_adaptive_retry_ratio(retry_depth)
 
-        return QueueStatus(queues=queues, states=states_upper, retry_ratio=retry_ratio)
+        return QueueStatus(queues=queues, states=states, retry_ratio=retry_ratio)
 
     async def get_dlq_tasks(self, limit: int = 100) -> List[TaskDetail]:
         """Get tasks from dead letter queue."""

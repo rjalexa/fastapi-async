@@ -306,16 +306,10 @@ async def update_task_state(
         elif value is not None:
             fields[key] = str(value)
 
-    # Update task data and counters atomically
+    # Update task data atomically
     async with redis_conn.pipeline(transaction=True) as pipe:
         # Update task data
         await pipe.hset(f"task:{task_id}", mapping=fields)
-
-        # Update state counters
-        if old_state and old_state.lower() != state.lower():
-            await pipe.decrby(f"metrics:tasks:state:{old_state.lower()}", 1)
-        await pipe.incrby(f"metrics:tasks:state:{state.lower()}", 1)
-
         await pipe.execute()
 
     # Publish real-time update
@@ -327,12 +321,6 @@ async def update_task_state(
         queue_depths["scheduled"] = await redis_conn.zcard("tasks:scheduled")
         queue_depths["dlq"] = await redis_conn.llen("dlq:tasks")
 
-        # Get current state counts
-        state_counts = {}
-        for state_name in ["pending", "active", "completed", "failed", "dlq"]:
-            count = await redis_conn.get(f"metrics:tasks:state:{state_name}")
-            state_counts[state_name.upper()] = int(count) if count else 0
-
         # Publish update
         update_data = {
             "type": "task_state_changed",
@@ -340,7 +328,6 @@ async def update_task_state(
             "old_state": old_state,
             "new_state": state,
             "queue_depths": queue_depths,
-            "state_counts": state_counts,
             "timestamp": current_time,
         }
 
