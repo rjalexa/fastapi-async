@@ -46,7 +46,7 @@ async def cleanup_metrics():
         print(f"❌ Error cleaning up metrics: {e}")
         raise
     finally:
-        await redis_conn.close()
+        await redis_conn.aclose()
 
 
 if __name__ == "__main__":
