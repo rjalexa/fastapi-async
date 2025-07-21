@@ -526,7 +526,22 @@ async def extract_pdf_with_pybreaker(
 
                 # Parse the JSON response
                 try:
-                    page_data = json.loads(page_result)
+                    # Clean the response by removing markdown code blocks if present
+                    cleaned_result = page_result.strip()
+                    if cleaned_result.startswith("```json"):
+                        # Remove opening ```json
+                        cleaned_result = cleaned_result[7:]
+                    if cleaned_result.startswith("```"):
+                        # Remove opening ``` (in case it's just ```)
+                        cleaned_result = cleaned_result[3:]
+                    if cleaned_result.endswith("```"):
+                        # Remove closing ```
+                        cleaned_result = cleaned_result[:-3]
+                    
+                    # Strip any remaining whitespace
+                    cleaned_result = cleaned_result.strip()
+                    
+                    page_data = json.loads(cleaned_result)
                     # Extract the pages array from the response
                     if "pages" in page_data and len(page_data["pages"]) > 0:
                         all_pages_data.extend(page_data["pages"])
