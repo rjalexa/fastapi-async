@@ -179,6 +179,53 @@ async def get_async_redis_connection() -> aioredis.Redis:
 
 def classify_error(status_code: int, error_message: str) -> str:
     """Classify error as transient or permanent."""
+    # First check for dependency/environment errors that should go directly to DLQ
+    dependency_error_patterns = [
+        "poppler installed and in PATH",
+        "command not found",
+        "no such file or directory",
+        "permission denied",
+        "module not found",
+        "import error",
+        "library not found",
+        "missing dependency",
+        "environment variable not set",
+        "configuration error",
+        "invalid configuration",
+        "database connection failed",
+        "redis connection failed",
+    ]
+    
+    error_lower = error_message.lower()
+    for pattern in dependency_error_patterns:
+        if pattern in error_lower:
+            return "DependencyError"
+    
+    # Check for other permanent errors based on content
+    permanent_error_patterns = [
+        "invalid api key",
+        "authentication failed",
+        "unauthorized",
+        "forbidden",
+        "not found",
+        "bad request",
+        "invalid request",
+        "malformed",
+        "syntax error",
+        "parse error",
+        "invalid json",
+        "invalid format",
+        "unsupported format",
+        "file too large",
+        "quota exceeded",
+        "limit exceeded",
+    ]
+    
+    for pattern in permanent_error_patterns:
+        if pattern in error_lower:
+            return "PermanentError"
+    
+    # Check HTTP status codes
     if status_code in ERROR_CLASSIFICATIONS:
         err_cls = ERROR_CLASSIFICATIONS[status_code]
         if err_cls is TransientError:
@@ -190,8 +237,8 @@ def classify_error(status_code: int, error_message: str) -> str:
                 return "ServiceUnavailable"
             return "NetworkTimeout"
         return "PermanentError"
-    # Fallback based on message content
-    # (assuming this logic is sound for your use case)
+    
+    # Fallback to default retry behavior for unknown errors
     return "Default"
 
 
@@ -427,8 +474,18 @@ async def extract_pdf_with_pybreaker(
         # Decode base64 PDF content
         pdf_bytes = base64.b64decode(pdf_content_b64)
 
-        # Convert PDF to images
-        pages = convert_from_bytes(pdf_bytes, dpi=300, fmt="PNG")
+        # Convert PDF to images - this is where poppler dependency errors occur
+        try:
+            pages = convert_from_bytes(pdf_bytes, dpi=300, fmt="PNG")
+        except Exception as pdf_error:
+            # Check if this is a poppler dependency error
+            error_msg = str(pdf_error).lower()
+            if "poppler" in error_msg or "pdftoppm" in error_msg or "command not found" in error_msg:
+                # This is a dependency error - should go directly to DLQ
+                raise PermanentError(f"PDF extraction dependency error: {str(pdf_error)}")
+            else:
+                # Re-raise the original error for other PDF processing issues
+                raise
 
         # Load the PDF extraction prompt
         system_prompt = load_prompt("pdfxtract")
@@ -615,10 +672,17 @@ def process_task(self: Task, task_id: str) -> str:
     async def _handle_error(exc, error_type="TransientError"):
         """Handle task errors with proper Redis connection."""
         redis_conn = await get_async_redis_connection()
-        if error_type == "PermanentError":
-            await move_to_dlq(redis_conn, task_id, str(exc), "PermanentError")
-            return f"Task {task_id} moved to DLQ: {exc}"
+        
+        # Classify the error to determine proper handling
+        error_classification = classify_error(getattr(exc, "status_code", 0), str(exc))
+        
+        if error_type == "PermanentError" or error_classification in ["PermanentError", "DependencyError"]:
+            # Send to DLQ for permanent errors and dependency errors
+            dlq_reason = "DependencyError" if error_classification == "DependencyError" else "PermanentError"
+            await move_to_dlq(redis_conn, task_id, str(exc), dlq_reason)
+            return f"Task {task_id} moved to DLQ ({dlq_reason}): {exc}"
         else:
+            # Schedule for retry for transient errors
             await schedule_task_for_retry(redis_conn, task_id, retry_count, exc)
             return f"Task {task_id} failed, scheduled for retry."
 
