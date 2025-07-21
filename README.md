@@ -126,7 +126,7 @@ The system is composed of several key services, each running in its own Docker c
 ### Data Flow & Task Lifecycle
 
 1.  **Task Creation**: A client sends a request to the FastAPI `/api/v1/tasks/summarize/` endpoint.
-2.  **Metadata Storage**: The API creates a task hash in Redis (`task:{uuid}`), sets its state to `PENDING`, and increments the `metrics:tasks:state:pending` counter.
+2.  **Metadata Storage**: The API creates a task hash in Redis (`task:{uuid}`) and sets its state to `PENDING`.
 3.  **Queueing**: The task ID is pushed to the `tasks:pending:primary` Redis list.
 4.  **Real-time Update**: A message is published to the `queue-updates` channel, which is streamed to the frontend.
 5.  **Consumption**: A worker process, listening with `BLPOP`, pulls a task ID from the `tasks:pending:primary` or `tasks:pending:retry` queue.
@@ -134,7 +134,7 @@ The system is composed of several key services, each running in its own Docker c
 7.  **Completion**:
     - **Success**: State is updated to `COMPLETED`, result is stored.
     - **Failure**: State is updated to `FAILED`. If retries are available, it's moved to the `tasks:scheduled` queue for a delayed retry. If not, it's moved to the `dlq:tasks` queue.
-8.  **Monitoring**: Throughout the lifecycle, state counters are updated atomically, providing a consistent view of the system for the monitoring dashboard.
+8.  **Monitoring**: Throughout the lifecycle, task state changes are broadcast via the pub/sub channel, providing real-time updates to the monitoring dashboard.
 
 ## 4. Prerequisites
 
@@ -230,7 +230,6 @@ The system relies on a set of well-defined Redis data structures for its operati
 
 ### Monitoring & Metrics
 
-- **`metrics:tasks:state:{state}`** (String/Counter): A set of counters for each task state (e.g., `metrics:tasks:state:pending`). These are updated atomically and provide an efficient way to get system-wide state counts.
 - **`worker:heartbeat:{worker-id}`** (String): A key used by each worker to report its liveness.
 - **`queue-updates`** (Pub/Sub Channel): Used to broadcast real-time updates to the API for the SSE stream.
 
