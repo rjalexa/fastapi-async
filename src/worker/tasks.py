@@ -418,11 +418,22 @@ async def schedule_task_for_retry(
 
 
 async def summarize_text_with_pybreaker(content: str) -> str:
-    """Summarize text via OpenRouter protected by a circuit breaker."""
+    """Summarize text via OpenRouter protected by centralized state management."""
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
 
     try:
+        # Check centralized OpenRouter state before attempting API call
+        redis_conn = await get_async_redis_connection()
+        from openrouter_state import OpenRouterStateManager
+        
+        state_manager = OpenRouterStateManager(redis_conn)
+        should_skip, skip_reason = await state_manager.should_skip_api_call()
+        
+        if should_skip:
+            # Don't attempt API call - fail immediately for retry later
+            raise TransientError(f"OpenRouter service unavailable: {skip_reason}")
+
         # Load the system prompt (no formatting needed - it's the complete system message)
         system_prompt = load_prompt("summarize")
 
@@ -432,7 +443,7 @@ async def summarize_text_with_pybreaker(content: str) -> str:
             {"role": "user", "content": f"Summarize this text: {content}"},
         ]
 
-        # Call the generic OpenRouter API function
+        # Call the generic OpenRouter API function (which includes rate limiting and reporting)
         return await call_openrouter_api(messages)
 
     except (FileNotFoundError, ValueError) as e:
@@ -440,8 +451,8 @@ async def summarize_text_with_pybreaker(content: str) -> str:
         raise PermanentError(f"Prompt error: {str(e)}")
     except Exception as e:
         msg = str(e)
-        if "circuit breaker" in msg.lower():
-            raise TransientError(f"Circuit breaker protection: {msg}")
+        if "circuit breaker" in msg.lower() or "service unavailable" in msg.lower():
+            raise TransientError(f"OpenRouter service protection: {msg}")
 
         # Simple status code parsing
         code = 0
@@ -463,11 +474,22 @@ async def summarize_text_with_pybreaker(content: str) -> str:
 async def extract_pdf_with_pybreaker(
     pdf_content_b64: str, filename: str, issue_date: str = None
 ) -> str:
-    """Extract articles from PDF pages via OpenRouter protected by a circuit breaker."""
+    """Extract articles from PDF pages via OpenRouter protected by centralized state management."""
     if not settings.openrouter_api_key:
         raise PermanentError("OpenRouter API key not configured")
 
     try:
+        # Check centralized OpenRouter state before attempting API call
+        redis_conn = await get_async_redis_connection()
+        from openrouter_state import OpenRouterStateManager
+        
+        state_manager = OpenRouterStateManager(redis_conn)
+        should_skip, skip_reason = await state_manager.should_skip_api_call()
+        
+        if should_skip:
+            # Don't attempt API call - fail immediately for retry later
+            raise TransientError(f"OpenRouter service unavailable: {skip_reason}")
+
         # Decode base64 PDF content
         pdf_bytes = base64.b64decode(pdf_content_b64)
 
@@ -518,7 +540,7 @@ async def extract_pdf_with_pybreaker(
                     },
                 ]
 
-                # Call the OpenRouter API for this page
+                # Call the OpenRouter API for this page (includes rate limiting and reporting)
                 page_result = await call_openrouter_api(messages)
 
                 # Parse the JSON response
@@ -588,8 +610,8 @@ async def extract_pdf_with_pybreaker(
         raise PermanentError(f"PDF extraction error: {str(e)}")
     except Exception as e:
         msg = str(e)
-        if "circuit breaker" in msg.lower():
-            raise TransientError(f"Circuit breaker protection: {msg}")
+        if "circuit breaker" in msg.lower() or "service unavailable" in msg.lower():
+            raise TransientError(f"OpenRouter service protection: {msg}")
 
         # Simple status code parsing
         code = 0

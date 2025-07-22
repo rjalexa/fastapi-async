@@ -231,6 +231,15 @@ class APITester:
             self.created_task_ids.append(task_id)
             print(f"  Created task: {task_id}")
 
+        # Test PDF extraction task creation (without actual file upload for now)
+        # Note: This will fail with 422 since we're not providing a file, but it tests the endpoint exists
+        await self.test_endpoint(
+            "POST",
+            "/api/v1/tasks/pdfxtract",
+            expected_status=422,
+            description="Test PDF extraction endpoint (expected 422 - no file)",
+        )
+
         return task_id
 
     async def test_task_management(self, task_id: Optional[str] = None):
@@ -348,6 +357,50 @@ class APITester:
                 description=f"Get tasks in {queue_name} queue with limit",
             )
 
+    async def test_openrouter_endpoints(self):
+        """Test OpenRouter monitoring endpoints."""
+        print("Testing OpenRouter endpoints...")
+
+        # Test OpenRouter status
+        await self.test_endpoint(
+            "GET", "/api/v1/openrouter/status", description="Get OpenRouter status"
+        )
+
+        # Test OpenRouter status with force refresh
+        await self.test_endpoint(
+            "GET",
+            "/api/v1/openrouter/status",
+            params={"force_refresh": True},
+            description="Get OpenRouter status (force refresh)",
+        )
+
+        # Test OpenRouter metrics
+        await self.test_endpoint(
+            "GET", "/api/v1/openrouter/metrics", description="Get OpenRouter metrics"
+        )
+
+        # Test OpenRouter metrics with custom days
+        await self.test_endpoint(
+            "GET",
+            "/api/v1/openrouter/metrics",
+            params={"days": 30},
+            description="Get OpenRouter metrics (30 days)",
+        )
+
+    async def test_redis_endpoints(self):
+        """Test Redis monitoring endpoints."""
+        print("Testing Redis endpoints...")
+
+        # Test Redis pool statistics
+        await self.test_endpoint(
+            "GET", "/api/v1/redis/pool-stats", description="Get Redis pool statistics"
+        )
+
+        # Test Redis health check
+        await self.test_endpoint(
+            "GET", "/api/v1/redis/health", description="Get Redis health status"
+        )
+
     async def test_error_conditions(self):
         """Test various error conditions."""
         print("Testing error conditions...")
@@ -396,6 +449,8 @@ class APITester:
 
         await self.test_task_management(task_id)
         await self.test_queue_endpoints()
+        await self.test_openrouter_endpoints()
+        await self.test_redis_endpoints()
         await self.test_error_conditions()
 
         print("=" * 60)

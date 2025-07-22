@@ -15,7 +15,26 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { QueueStatus } from '../../lib/api';
-import { nodeTypes } from './nodeTypes';
+import {
+  ActiveNode,
+  CompletedNode,
+  PrimaryQueueNode,
+  ScheduledQueueNode,
+  RetryNode,
+  FailedNode,
+  DeadLetterNode,
+} from './CustomNodes';
+
+// Define nodeTypes object for React Flow
+const nodeTypes = {
+  active: ActiveNode,
+  completed: CompletedNode,
+  primaryQueue: PrimaryQueueNode,
+  scheduledQueue: ScheduledQueueNode,
+  retry: RetryNode,
+  failed: FailedNode,
+  deadLetter: DeadLetterNode,
+};
 
 interface TaskFlowGraphProps {
   queueStatus: QueueStatus | null;

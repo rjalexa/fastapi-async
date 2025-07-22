@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import health, tasks, queues, summarize, workers, pdfxtract, redis
+from routers import health, tasks, queues, summarize, workers, pdfxtract, redis, openrouter
 from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
@@ -137,6 +137,7 @@ app.include_router(tasks.router)
 app.include_router(queues.router)
 app.include_router(workers.router)
 app.include_router(redis.router)  # Redis monitoring endpoints
+app.include_router(openrouter.router)  # OpenRouter monitoring endpoints
 
 
 @app.get("/")
