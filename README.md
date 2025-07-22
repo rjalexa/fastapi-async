@@ -44,23 +44,24 @@ To demonstrate the system's capabilities with realistic resource-intensive scena
     - [Data Flow \& Task Lifecycle](#data-flow--task-lifecycle)
   - [4. Prerequisites](#4-prerequisites)
   - [5. Quick Start](#5-quick-start)
-  - [6. Usage](#6-usage)
-  - [7. API Reference](#7-api-reference)
+  - [6. Screenshots](#6-screenshots)
+  - [7. Usage](#7-usage)
+  - [8. API Reference](#8-api-reference)
     - [Health Checks](#health-checks)
     - [Task Creation (Application-Specific)](#task-creation-application-specific)
     - [Generic Task Management](#generic-task-management)
     - [Queue Monitoring \& Management](#queue-monitoring--management)
     - [Worker Management](#worker-management)
-  - [8. Redis Data Structures](#8-redis-data-structures)
+  - [9. Redis Data Structures](#9-redis-data-structures)
     - [Task Queues](#task-queues)
     - [Task Metadata](#task-metadata)
     - [Monitoring \& Metrics](#monitoring--metrics)
     - [Rate Limiting \& External API Management](#rate-limiting--external-api-management)
     - [Circuit Breaker \& Worker Management](#circuit-breaker--worker-management)
-  - [9. Development](#9-development)
+  - [10. Development](#10-development)
     - [Running Locally](#running-locally)
     - [System Reset](#system-reset)
-  - [10. Distributed Rate Limiting](#10-distributed-rate-limiting)
+  - [11. Distributed Rate Limiting](#11-distributed-rate-limiting)
     - [Overview](#overview)
     - [Key Features](#key-features-1)
     - [How It Works](#how-it-works)
@@ -75,9 +76,9 @@ To demonstrate the system's capabilities with realistic resource-intensive scena
       - [Token Bucket State](#token-bucket-state)
     - [Benefits](#benefits)
     - [Monitoring and Observability](#monitoring-and-observability)
-  - [11. Performance Management](#11-performance-management)
+  - [12. Performance Management](#12-performance-management)
     - [Rate Limiting Performance Tuning](#rate-limiting-performance-tuning)
-  - [12. Troubleshooting](#12-troubleshooting)
+  - [13. Troubleshooting](#13-troubleshooting)
 
 ## 3. Architecture
 
@@ -164,13 +165,32 @@ Get the application up and running in just a few commands.
     - **Frontend UI**: [http://localhost:3000](http://localhost:3000)
     - **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 6. Usage
+## 6. Screenshots
+
+Here are some screenshots of the application in action:
+
+**APIs**
+![APIs](screenshots/apis.png)
+
+**Queues, Workers, and Circuitbreaker**
+![Queues, Workers, and Circuitbreaker](screenshots/queues__workers_circtuibreaker.png)
+
+**Task Detail**
+![Task Detail](screenshots/task_detail.png)
+
+**Task State Flow Overview**
+![Task State Flow Overview](screenshots/task_state_flow_overview.png)
+
+**Tasks History**
+![Tasks History](screenshots/tasks_history.png)
+
+## 7. Usage
 
 - **Create Tasks**: Use the API or utility scripts to create new tasks.
 - **Monitor System**: Open the Frontend UI to see real-time updates on queue depths, task states, and worker status.
 - **Manage Tasks**: Use the API to check task status, retry failed tasks, or delete them.
 
-## 7. API Reference
+## 8. API Reference
 
 The API is divided into several logical groups.
 
@@ -206,7 +226,7 @@ The API is divided into several logical groups.
 - `POST /api/v1/workers/reset-circuit-breaker`: Reset the circuit breakers on all workers.
 - `POST /api/v1/workers/open-circuit-breaker`: Manually open all circuit breakers to halt task processing.
 
-## 8. Redis Data Structures
+## 9. Redis Data Structures
 
 The system relies on a set of well-defined Redis data structures for its operation.
 
@@ -262,7 +282,7 @@ The system relies on a set of well-defined Redis data structures for its operati
   - `tasks_failed`: Total failed tasks
   - `last_seen`: Last heartbeat timestamp
 
-## 9. Development
+## 10. Development
 
 ### Running Locally
 
@@ -293,7 +313,7 @@ docker compose run --rm reset --confirm
 
 This command is safe to run as it's isolated within the `tools` profile in `docker-compose.yml` and requires explicit confirmation.
 
-## 10. Distributed Rate Limiting
+## 11. Distributed Rate Limiting
 
 AsyncTaskFlow includes a sophisticated distributed rate limiting system that coordinates API usage across all worker instances to respect external service limits (e.g., OpenRouter API rate limits).
 
@@ -428,7 +448,7 @@ The rate limiting system provides comprehensive monitoring capabilities:
 - **Integration Metrics**: Success/failure rates and wait times
 - **Configuration Changes**: Automatic updates when API limits change
 
-## 11. Performance Management
+## 12. Performance Management
 
 The system's performance can be tuned via environment variables in the `.env` file.
 
@@ -446,7 +466,7 @@ The system's performance can be tuned via environment variables in the `.env` fi
 
 Refer to the `.env.example` file for a full list of tunable parameters and example profiles for different environments.
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 - **Tasks are stuck in `PENDING`**:
     - Check worker logs: `docker compose logs -f worker`.
