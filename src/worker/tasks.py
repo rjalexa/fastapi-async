@@ -28,9 +28,7 @@ from circuit_breaker import (
 )
 from config import settings
 from prompts import load_prompt
-from redis_config import (
-    get_worker_standard_redis
-)
+from redis_config import get_worker_standard_redis
 
 # --- Custom Exceptions ----------------------------------------------------
 
@@ -192,12 +190,12 @@ def classify_error(status_code: int, error_message: str) -> str:
         "database connection failed",
         "redis connection failed",
     ]
-    
+
     error_lower = error_message.lower()
     for pattern in dependency_error_patterns:
         if pattern in error_lower:
             return "DependencyError"
-    
+
     # Check for other permanent errors based on content
     permanent_error_patterns = [
         "invalid api key",
@@ -217,11 +215,11 @@ def classify_error(status_code: int, error_message: str) -> str:
         "quota exceeded",
         "limit exceeded",
     ]
-    
+
     for pattern in permanent_error_patterns:
         if pattern in error_lower:
             return "PermanentError"
-    
+
     # Check HTTP status codes
     if status_code in ERROR_CLASSIFICATIONS:
         err_cls = ERROR_CLASSIFICATIONS[status_code]
@@ -234,7 +232,7 @@ def classify_error(status_code: int, error_message: str) -> str:
                 return "ServiceUnavailable"
             return "NetworkTimeout"
         return "PermanentError"
-    
+
     # Fallback to default retry behavior for unknown errors
     return "Default"
 
@@ -426,10 +424,10 @@ async def summarize_text_with_pybreaker(content: str) -> str:
         # Check centralized OpenRouter state before attempting API call
         redis_conn = await get_async_redis_connection()
         from openrouter_state import OpenRouterStateManager
-        
+
         state_manager = OpenRouterStateManager(redis_conn)
         should_skip, skip_reason = await state_manager.should_skip_api_call()
-        
+
         if should_skip:
             # Don't attempt API call - fail immediately for retry later
             raise TransientError(f"OpenRouter service unavailable: {skip_reason}")
@@ -482,10 +480,10 @@ async def extract_pdf_with_pybreaker(
         # Check centralized OpenRouter state before attempting API call
         redis_conn = await get_async_redis_connection()
         from openrouter_state import OpenRouterStateManager
-        
+
         state_manager = OpenRouterStateManager(redis_conn)
         should_skip, skip_reason = await state_manager.should_skip_api_call()
-        
+
         if should_skip:
             # Don't attempt API call - fail immediately for retry later
             raise TransientError(f"OpenRouter service unavailable: {skip_reason}")
@@ -499,9 +497,15 @@ async def extract_pdf_with_pybreaker(
         except Exception as pdf_error:
             # Check if this is a poppler dependency error
             error_msg = str(pdf_error).lower()
-            if "poppler" in error_msg or "pdftoppm" in error_msg or "command not found" in error_msg:
+            if (
+                "poppler" in error_msg
+                or "pdftoppm" in error_msg
+                or "command not found" in error_msg
+            ):
                 # This is a dependency error - should go directly to DLQ
-                raise PermanentError(f"PDF extraction dependency error: {str(pdf_error)}")
+                raise PermanentError(
+                    f"PDF extraction dependency error: {str(pdf_error)}"
+                )
             else:
                 # Re-raise the original error for other PDF processing issues
                 raise
@@ -556,10 +560,10 @@ async def extract_pdf_with_pybreaker(
                     if cleaned_result.endswith("```"):
                         # Remove closing ```
                         cleaned_result = cleaned_result[:-3]
-                    
+
                     # Strip any remaining whitespace
                     cleaned_result = cleaned_result.strip()
-                    
+
                     page_data = json.loads(cleaned_result)
                     # Extract the pages array from the response
                     if "pages" in page_data and len(page_data["pages"]) > 0:
@@ -652,7 +656,7 @@ def process_task(self: Task, task_id: str) -> str:
     async def _run_task():
         # Get optimized Redis connection
         redis_conn = await get_async_redis_connection()
-        
+
         # Update heartbeat at start of task
         await update_worker_heartbeat(redis_conn, worker_id)
 
@@ -706,13 +710,20 @@ def process_task(self: Task, task_id: str) -> str:
     async def _handle_error(exc, error_type="TransientError"):
         """Handle task errors with proper Redis connection."""
         redis_conn = await get_async_redis_connection()
-        
+
         # Classify the error to determine proper handling
         error_classification = classify_error(getattr(exc, "status_code", 0), str(exc))
-        
-        if error_type == "PermanentError" or error_classification in ["PermanentError", "DependencyError"]:
+
+        if error_type == "PermanentError" or error_classification in [
+            "PermanentError",
+            "DependencyError",
+        ]:
             # Send to DLQ for permanent errors and dependency errors
-            dlq_reason = "DependencyError" if error_classification == "DependencyError" else "PermanentError"
+            dlq_reason = (
+                "DependencyError"
+                if error_classification == "DependencyError"
+                else "PermanentError"
+            )
             await move_to_dlq(redis_conn, task_id, str(exc), dlq_reason)
             return f"Task {task_id} moved to DLQ ({dlq_reason}): {exc}"
         else:
@@ -747,10 +758,11 @@ def process_scheduled_tasks() -> str:
     """
     Periodically run by Celery Beat to move scheduled tasks back to the pending queue.
     """
+
     async def _run_processing():
         # Get optimized Redis connection
         redis_conn = await get_async_redis_connection()
-        
+
         now = time.time()
         # Get up to 100 tasks that are due to be retried
         due_tasks = await redis_conn.zrangebyscore(

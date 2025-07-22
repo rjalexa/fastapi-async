@@ -3,12 +3,22 @@
 
 import os
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import health, tasks, queues, summarize, workers, pdfxtract, redis, openrouter
+from routers import (
+    health,
+    tasks,
+    queues,
+    summarize,
+    workers,
+    pdfxtract,
+    redis,
+    openrouter,
+)
 from services import RedisService, TaskService, QueueService, HealthService
 import services  # Import the module to modify globals
 
@@ -33,7 +43,7 @@ celery_app.conf.update(
 )
 
 
-async def initialize_services() -> tuple:
+async def initialize_services() -> tuple[RedisService, TaskService, QueueService, HealthService]:
     """Initialize all services and return them."""
     print(f"Initializing services in process {os.getpid()}")
 
@@ -44,7 +54,7 @@ async def initialize_services() -> tuple:
     # Test Redis connection
     redis_ok = await redis_service.ping()
     print(f"Redis connection: {'OK' if redis_ok else 'FAILED'}")
-    
+
     if redis_ok:
         # Log connection pool stats
         pool_stats = await redis_service.get_pool_stats()
@@ -61,7 +71,7 @@ async def initialize_services() -> tuple:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
     print("🚀 Starting AsyncTaskFlow API...")
@@ -141,7 +151,7 @@ app.include_router(openrouter.router)  # OpenRouter monitoring endpoints
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """Root endpoint."""
     return {
         "message": "AsyncTaskFlow API",

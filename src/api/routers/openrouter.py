@@ -11,8 +11,10 @@ from pydantic import BaseModel
 
 from config import settings
 from services import get_redis_service
-from openrouter_state import OpenRouterStateManager, OpenRouterState, OpenRouterStateData
-import redis.asyncio as aioredis
+from openrouter_state import (
+    OpenRouterStateManager,
+    OpenRouterState,
+)
 
 
 router = APIRouter(prefix="/api/v1/openrouter", tags=["openrouter"])
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/api/v1/openrouter", tags=["openrouter"])
 
 class OpenRouterStatus(BaseModel):
     """OpenRouter status response model."""
+
     status: str  # "active", "api_key_missing", "api_key_invalid", "credits_exhausted", "error"
     message: str
     balance: Optional[float] = None
@@ -35,7 +38,7 @@ class OpenRouterStatus(BaseModel):
 async def check_openrouter_api_key(api_key: str, base_url: str) -> Dict:
     """
     Check OpenRouter API key validity and get credit information.
-    
+
     Returns:
         Dictionary containing status and credit information
     """
@@ -54,32 +57,32 @@ async def check_openrouter_api_key(api_key: str, base_url: str) -> Dict:
                 return {
                     "status": "api_key_invalid",
                     "message": "API key is invalid",
-                    "error_details": "Authentication failed"
+                    "error_details": "Authentication failed",
                 }
             elif response.status_code == 403:
                 return {
-                    "status": "credits_exhausted", 
+                    "status": "credits_exhausted",
                     "message": "Credits exhausted",
-                    "error_details": "Insufficient credits"
+                    "error_details": "Insufficient credits",
                 }
             elif response.status_code != 200:
                 return {
                     "status": "error",
                     "message": f"API error: {response.status_code}",
-                    "error_details": response.text
+                    "error_details": response.text,
                 }
 
             data = response.json()
-            
+
             # Handle different possible response structures
             if isinstance(data, dict):
                 data_section = data.get("data", data)
-                
+
                 # Extract credit information
                 balance = 0.0
                 usage_today = 0.0
                 usage_month = 0.0
-                
+
                 if isinstance(data_section, dict):
                     # OpenRouter API uses 'usage' field for total usage amount
                     total_usage = data_section.get("usage", 0.0)
@@ -95,94 +98,91 @@ async def check_openrouter_api_key(api_key: str, base_url: str) -> Dict:
                         "message": "Credits exhausted",
                         "balance": float(balance),
                         "usage_today": float(usage_today),
-                        "usage_month": float(usage_month)
+                        "usage_month": float(usage_month),
                     }
-                
+
                 return {
                     "status": "active",
                     "message": "Service active",
                     "balance": float(balance) if balance is not None else 0.0,
-                    "usage_today": float(usage_today) if usage_today is not None else 0.0,
-                    "usage_month": float(usage_month) if usage_month is not None else 0.0
+                    "usage_today": float(usage_today)
+                    if usage_today is not None
+                    else 0.0,
+                    "usage_month": float(usage_month)
+                    if usage_month is not None
+                    else 0.0,
                 }
             else:
                 return {
                     "status": "error",
                     "message": "Unexpected API response format",
-                    "error_details": f"Response type: {type(data)}"
+                    "error_details": f"Response type: {type(data)}",
                 }
 
     except httpx.TimeoutException:
         return {
             "status": "error",
             "message": "API timeout",
-            "error_details": "Request timed out"
+            "error_details": "Request timed out",
         }
     except httpx.RequestError as e:
-        return {
-            "status": "error", 
-            "message": "Network error",
-            "error_details": str(e)
-        }
+        return {"status": "error", "message": "Network error", "error_details": str(e)}
     except json.JSONDecodeError as e:
         return {
             "status": "error",
             "message": "Invalid JSON response",
-            "error_details": str(e)
+            "error_details": str(e),
         }
     except Exception as e:
         return {
             "status": "error",
             "message": "Unexpected error",
-            "error_details": str(e)
+            "error_details": str(e),
         }
 
 
 @router.get("/status", response_model=OpenRouterStatus)
 async def get_openrouter_status(
-    force_refresh: bool = False,
-    redis_service = Depends(get_redis_service)
+    force_refresh: bool = False, redis_service=Depends(get_redis_service)
 ):
     """
     Get OpenRouter service status with intelligent caching.
-    
+
     Args:
         force_refresh: Force a fresh API check, bypassing cache
-    
+
     Returns status with appropriate labels for the frontend badge:
     - "api_key_missing": Red badge
-    - "api_key_invalid": Red badge  
+    - "api_key_invalid": Red badge
     - "credits_exhausted": Orange badge
     - "rate_limited": Orange badge
     - "active": Green badge
     - "error": Red badge
     """
-    
+
     # Check if API key is configured
     if not settings.openrouter_api_key:
         return OpenRouterStatus(
-            status="api_key_missing",
-            message="API Key missing",
-            cache_hit=False
+            status="api_key_missing", message="API Key missing", cache_hit=False
         )
-    
+
     if not redis_service or not redis_service.redis:
         return OpenRouterStatus(
             status="error",
             message="Redis service unavailable",
             error_details="Cannot access state management",
-            cache_hit=False
+            cache_hit=False,
         )
-    
+
     try:
         # Initialize state manager
         state_manager = OpenRouterStateManager(redis_service.redis)
-        
+
         # Try to get cached state first (unless force refresh)
         cached_state = None
         if not force_refresh:
             cached_state = await state_manager.get_state()
-        
+
         # If we have fresh cached state, use it
         if cached_state and await state_manager.is_fresh():
             return OpenRouterStatus(
@@ -195,9 +195,9 @@ async def get_openrouter_status(
                 error_details=cached_state.error_details,
                 consecutive_failures=cached_state.consecutive_failures,
                 circuit_breaker_open=cached_state.circuit_breaker_open,
-                cache_hit=True
+                cache_hit=True,
             )
-        
+
         # Check if we should skip API call due to circuit breaker or rate limiting
         should_skip, skip_reason = await state_manager.should_skip_api_call()
         if should_skip and cached_state:
@@ -212,15 +212,14 @@ async def get_openrouter_status(
                 error_details=cached_state.error_details,
                 consecutive_failures=cached_state.consecutive_failures,
                 circuit_breaker_open=cached_state.circuit_breaker_open,
-                cache_hit=True
+                cache_hit=True,
             )
-        
+
         # Perform fresh API check
         api_result = await check_openrouter_api_key(
-            settings.openrouter_api_key,
-            settings.openrouter_base_url
+            settings.openrouter_api_key, settings.openrouter_base_url
         )
-        
+
         # Map API result to state
         state_map = {
             "active": OpenRouterState.ACTIVE,
@@ -228,14 +227,14 @@ async def get_openrouter_status(
             "credits_exhausted": OpenRouterState.CREDITS_EXHAUSTED,
             "error": OpenRouterState.ERROR,
         }
-        
+
         new_state = state_map.get(api_result["status"], OpenRouterState.ERROR)
         is_success = api_result["status"] == "active"
-        
+
         # Handle rate limiting detection
         if "rate limit" in api_result.get("error_details", "").lower():
             new_state = OpenRouterState.RATE_LIMITED
-        
+
         # Update state in Redis
         await state_manager.update_state(
             state=new_state,
@@ -246,7 +245,7 @@ async def get_openrouter_status(
             error_details=api_result.get("error_details"),
             is_api_success=is_success,
         )
-        
+
         # Get updated state for response
         updated_state = await state_manager.get_state(force_refresh=True)
         if updated_state:
@@ -260,9 +259,9 @@ async def get_openrouter_status(
                 error_details=updated_state.error_details,
                 consecutive_failures=updated_state.consecutive_failures,
                 circuit_breaker_open=updated_state.circuit_breaker_open,
-                cache_hit=False
+                cache_hit=False,
             )
-        
+
         # Fallback to API result if state update failed
         return OpenRouterStatus(
             status=api_result["status"],
@@ -272,36 +271,35 @@ async def get_openrouter_status(
             usage_month=api_result.get("usage_month"),
             last_check=datetime.now(timezone.utc).isoformat(),
             error_details=api_result.get("error_details"),
-            cache_hit=False
+            cache_hit=False,
         )
-        
+
     except Exception as e:
         return OpenRouterStatus(
             status="error",
             message="Status check failed",
             error_details=str(e),
-            cache_hit=False
+            cache_hit=False,
         )
 
 
 @router.get("/metrics")
 async def get_openrouter_metrics(
-    days: int = 7,
-    redis_service = Depends(get_redis_service)
+    days: int = 7, redis_service=Depends(get_redis_service)
 ):
     """Get OpenRouter usage metrics for the specified number of days."""
     if not redis_service or not redis_service.redis:
         raise HTTPException(status_code=503, detail="Redis service unavailable")
-    
+
     try:
         state_manager = OpenRouterStateManager(redis_service.redis)
         metrics = await state_manager.get_metrics(days=days)
-        
+
         return {
             "metrics": metrics,
             "days": days,
-            "generated_at": datetime.now(timezone.utc).isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")

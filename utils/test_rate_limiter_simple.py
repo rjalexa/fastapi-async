@@ -14,7 +14,11 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src", "worker"))
 
 # Import rate limiter components at the top
-from rate_limiter import RedisTokenBucketRateLimiter, global_rate_limiter, get_rate_limit_status
+from rate_limiter import (
+    RedisTokenBucketRateLimiter,
+    global_rate_limiter,
+    get_rate_limit_status,
+)
 
 
 # Mock Redis for testing

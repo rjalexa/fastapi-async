@@ -23,7 +23,7 @@ def load_prompt(prompt_name: str) -> str:
     # In Docker container, prompts are mounted at /app/prompts/
     # In local development, calculate relative to project root
     current_dir = Path(__file__).parent
-    
+
     # Check if we're in a Docker container (prompts mounted at /app/prompts/)
     docker_prompts_path = Path("/app/prompts")
     if docker_prompts_path.exists():

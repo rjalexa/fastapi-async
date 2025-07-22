@@ -5,12 +5,12 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, status
 
 from schemas import HealthStatus
-from services import health_service
+from services import health_service, HealthService
 
 router = APIRouter(tags=["health"])
 
 
-def get_health_service(request: Request):
+def get_health_service(request: Request) -> HealthService | None:
     """Get health service from global variable or app state."""
     # Try global service first
     if health_service:
@@ -45,6 +45,7 @@ async def health_check(request: Request) -> HealthStatus:
                 "reason": "Health service not initialized",
             },
             timestamp=datetime.utcnow(),
+            note="Health service not initialized",
         )
 
     try:
@@ -59,6 +60,7 @@ async def health_check(request: Request) -> HealthStatus:
                 "error": str(e),
             },
             timestamp=datetime.utcnow(),
+            note=f"Health check failed: {str(e)}",
         )
 
 

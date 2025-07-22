@@ -15,7 +15,7 @@ import redis.asyncio as aioredis
 async def cleanup_metrics():
     """Remove all metrics keys from Redis."""
     # Use default Redis URL or get from environment
-    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     redis_conn = aioredis.from_url(redis_url, decode_responses=True)
 
     try:
@@ -39,7 +39,7 @@ async def cleanup_metrics():
         if metrics_keys:
             deleted_count = await redis_conn.delete(*metrics_keys)
             print(f"✅ Deleted {deleted_count} metrics keys")
-        
+
         print("🎉 Metrics cleanup completed!")
 
     except Exception as e:

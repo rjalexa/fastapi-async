@@ -44,7 +44,9 @@ def get_task_service() -> TaskService:
     "/", response_model=TaskListResponse, summary="List Tasks with FULL payloads"
 )
 async def list_tasks(
-    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    task_status: Optional[TaskState] = Query(
+        None, description="Filter tasks by status"
+    ),
     task_type: Optional[TaskType] = Query(
         None, description="Filter tasks by type (summarize or pdfxtract)"
     ),
@@ -53,8 +55,8 @@ async def list_tasks(
         None, description="Start date for filtering"
     ),
     end_date: Optional[datetime] = Query(None, description="End date for filtering"),
-    sort_by: Optional[str] = Query("created_at", description="Field to sort by"),
-    sort_order: Optional[str] = Query("desc", description="Sort order (asc or desc)"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_order: str = Query("desc", description="Sort order (asc or desc)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     task_id: Optional[str] = Query(None, description="Search by task ID"),
@@ -88,7 +90,9 @@ async def list_tasks(
 
 @router.get("/summaries/", response_model=TaskSummaryListResponse)
 async def list_task_summaries(
-    task_status: Optional[TaskState] = Query(None, description="Filter tasks by status"),
+    task_status: Optional[TaskState] = Query(
+        None, description="Filter tasks by status"
+    ),
     task_type: Optional[TaskType] = Query(
         None, description="Filter tasks by type (summarize or pdfxtract)"
     ),
@@ -97,8 +101,8 @@ async def list_task_summaries(
         None, description="Start date for filtering"
     ),
     end_date: Optional[datetime] = Query(None, description="End date for filtering"),
-    sort_by: Optional[str] = Query("created_at", description="Field to sort by"),
-    sort_order: Optional[str] = Query("desc", description="Sort order (asc or desc)"),
+    sort_by: str = Query("created_at", description="Field to sort by"),
+    sort_order: str = Query("desc", description="Sort order (asc or desc)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     task_id: Optional[str] = Query(None, description="Search by task ID"),
@@ -159,7 +163,7 @@ async def get_task(
 @router.post("/{task_id}/retry", response_model=TaskResponse)
 async def retry_task(
     task_id: str,
-    retry_request: TaskRetryRequest = None,
+    retry_request: Optional[TaskRetryRequest] = None,
     task_svc: TaskService = Depends(get_task_service),
 ) -> TaskResponse:
     """

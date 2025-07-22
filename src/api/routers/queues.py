@@ -28,12 +28,12 @@ async def get_queue_status(request: Request) -> QueueStatus:
     - Current adaptive retry ratio
     """
     # Try to get the queue service from app state first
-    current_queue_service = getattr(request.app.state, 'queue_service', None)
-    
+    current_queue_service = getattr(request.app.state, "queue_service", None)
+
     # Fallback to global variable
     if not current_queue_service:
         current_queue_service = queue_service
-    
+
     if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
@@ -81,12 +81,12 @@ async def get_tasks_in_queue(
     For other queues, tasks are in FIFO order.
     """
     # Try to get the queue service from app state first
-    current_queue_service = getattr(request.app.state, 'queue_service', None)
-    
+    current_queue_service = getattr(request.app.state, "queue_service", None)
+
     # Fallback to global variable
     if not current_queue_service:
         current_queue_service = queue_service
-    
+
     if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
@@ -135,12 +135,12 @@ async def get_dlq_tasks(
     - Task age exceeding limits
     """
     # Try to get the queue service from app state first
-    current_queue_service = getattr(request.app.state, 'queue_service', None)
-    
+    current_queue_service = getattr(request.app.state, "queue_service", None)
+
     # Fallback to global variable
     if not current_queue_service:
         current_queue_service = queue_service
-    
+
     if not current_queue_service:
         # Try to get from app state as fallback
         from services import QueueService, RedisService
@@ -194,8 +194,9 @@ async def stream_queue_status():
             # Send initial queue status
             # Import services module to get the current queue service
             import services
+
             current_queue_service = services.queue_service
-            
+
             if not current_queue_service:
                 # Try to get from app state as fallback
                 try:
