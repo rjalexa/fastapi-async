@@ -31,36 +31,56 @@ To demonstrate the system's capabilities with realistic resource-intensive scena
 - **Production Ready**: Docker-based deployment with proper logging, health checks, and resource management.
 - **Horizontal Scalability**: Easily scale worker capacity to meet demand.
 
-## 2. Table of Contents
+## 2. Screenshots
+
+Here are some screenshots of the application in action:
+
+**Task State Flow Overview**
+![Task State Flow Overview](screenshots/task_state_flow_overview.png)
+
+**Queues, Workers, and Circuitbreaker**
+![Queues, Workers, and Circuitbreaker](screenshots/queues__workers_circtuibreaker.png)
+
+**Tasks History**
+![Tasks History](screenshots/tasks_history.png)
+
+**Task Detail**
+![Task Detail](screenshots/task_detail.png)
+
+**APIs**
+![APIs](screenshots/apis.png)
+
+## 3. Table of Contents
 
 - [AsyncTaskFlow](#asynctaskflow)
   - [1. Overview](#1-overview)
     - [Key Features](#key-features)
-  - [2. Table of Contents](#2-table-of-contents)
-  - [3. Architecture](#3-architecture)
+  - [2. Screenshots](#2-screenshots)
+  - [3. Table of Contents](#3-table-of-contents)
+  - [4. Architecture](#4-architecture)
     - [System Architecture Diagram](#system-architecture-diagram)
     - [Tech Stack](#tech-stack)
     - [Key Components](#key-components)
     - [Data Flow \& Task Lifecycle](#data-flow--task-lifecycle)
-  - [4. Prerequisites](#4-prerequisites)
-  - [5. Quick Start](#5-quick-start)
-  - [6. Usage](#6-usage)
-  - [7. API Reference](#7-api-reference)
+  - [5. Prerequisites](#5-prerequisites)
+  - [6. Quick Start](#6-quick-start)
+  - [7. Usage](#7-usage)
+  - [8. API Reference](#8-api-reference)
     - [Health Checks](#health-checks)
     - [Task Creation (Application-Specific)](#task-creation-application-specific)
     - [Generic Task Management](#generic-task-management)
     - [Queue Monitoring \& Management](#queue-monitoring--management)
     - [Worker Management](#worker-management)
-  - [8. Redis Data Structures](#8-redis-data-structures)
+  - [9. Redis Data Structures](#9-redis-data-structures)
     - [Task Queues](#task-queues)
     - [Task Metadata](#task-metadata)
     - [Monitoring \& Metrics](#monitoring--metrics)
     - [Rate Limiting \& External API Management](#rate-limiting--external-api-management)
     - [Circuit Breaker \& Worker Management](#circuit-breaker--worker-management)
-  - [9. Development](#9-development)
+  - [10. Development](#10-development)
     - [Running Locally](#running-locally)
     - [System Reset](#system-reset)
-  - [10. Distributed Rate Limiting](#10-distributed-rate-limiting)
+  - [11. Distributed Rate Limiting](#11-distributed-rate-limiting)
     - [Overview](#overview)
     - [Key Features](#key-features-1)
     - [How It Works](#how-it-works)
@@ -75,11 +95,14 @@ To demonstrate the system's capabilities with realistic resource-intensive scena
       - [Token Bucket State](#token-bucket-state)
     - [Benefits](#benefits)
     - [Monitoring and Observability](#monitoring-and-observability)
-  - [11. Performance Management](#11-performance-management)
+  - [12. Performance Management](#12-performance-management)
     - [Rate Limiting Performance Tuning](#rate-limiting-performance-tuning)
-  - [12. Troubleshooting](#12-troubleshooting)
+  - [13. Collaboration](#13-collaboration)
+    - [How to Contribute](#how-to-contribute)
+    - [Reporting Issues](#reporting-issues)
+  - [14. Troubleshooting](#14-troubleshooting)
 
-## 3. Architecture
+## 4. Architecture
 
 The system is composed of several key services, each running in its own Docker container and orchestrated by Docker Compose.
 
@@ -136,13 +159,13 @@ The system is composed of several key services, each running in its own Docker c
     - **Failure**: State is updated to `FAILED`. If retries are available, it's moved to the `tasks:scheduled` queue for a delayed retry. If not, it's moved to the `dlq:tasks` queue.
 8.  **Monitoring**: Throughout the lifecycle, task state changes are broadcast via the pub/sub channel, providing real-time updates to the monitoring dashboard.
 
-## 4. Prerequisites
+## 5. Prerequisites
 
 - Docker and Docker Compose
 - A modern web browser (e.g., Chrome, Firefox)
 - `git` for cloning the repository
 
-## 5. Quick Start
+## 6. Quick Start
 
 Get the application up and running in just a few commands.
 
@@ -164,13 +187,13 @@ Get the application up and running in just a few commands.
     - **Frontend UI**: [http://localhost:3000](http://localhost:3000)
     - **API Docs (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## 6. Usage
+## 7. Usage
 
 - **Create Tasks**: Use the API or utility scripts to create new tasks.
 - **Monitor System**: Open the Frontend UI to see real-time updates on queue depths, task states, and worker status.
 - **Manage Tasks**: Use the API to check task status, retry failed tasks, or delete them.
 
-## 7. API Reference
+## 8. API Reference
 
 The API is divided into several logical groups.
 
@@ -206,7 +229,7 @@ The API is divided into several logical groups.
 - `POST /api/v1/workers/reset-circuit-breaker`: Reset the circuit breakers on all workers.
 - `POST /api/v1/workers/open-circuit-breaker`: Manually open all circuit breakers to halt task processing.
 
-## 8. Redis Data Structures
+## 9. Redis Data Structures
 
 The system relies on a set of well-defined Redis data structures for its operation.
 
@@ -262,7 +285,7 @@ The system relies on a set of well-defined Redis data structures for its operati
   - `tasks_failed`: Total failed tasks
   - `last_seen`: Last heartbeat timestamp
 
-## 9. Development
+## 10. Development
 
 ### Running Locally
 
@@ -293,7 +316,7 @@ docker compose run --rm reset --confirm
 
 This command is safe to run as it's isolated within the `tools` profile in `docker-compose.yml` and requires explicit confirmation.
 
-## 10. Distributed Rate Limiting
+## 11. Distributed Rate Limiting
 
 AsyncTaskFlow includes a sophisticated distributed rate limiting system that coordinates API usage across all worker instances to respect external service limits (e.g., OpenRouter API rate limits).
 
@@ -326,10 +349,10 @@ The rate limiting system uses a **Redis-based Token Bucket algorithm** to ensure
    - **Refill Rate**: Tokens added per second (e.g., 23 tokens/second)
    - **Current Tokens**: Available tokens at any given time
 
-3. **Request Coordination**: Before making an API call, each worker:
-   - Requests a token from the distributed rate limiter
-   - Waits if no tokens are available (up to a configurable timeout)
-   - Proceeds with the API call only after acquiring a token
+3. **Request Coordination**: Before making an API call, each worker atomically acquires a token from the bucket using a **Redis LUA script**. This ensures that the check for available tokens and the decrement of the token count happen as a single, indivisible operation, preventing race conditions between distributed workers. The worker:
+   - Requests a token from the distributed rate limiter.
+   - Waits if no tokens are available (up to a configurable timeout).
+   - Proceeds with the API call only after acquiring a token.
 
 4. **Automatic Refill**: Tokens are continuously added to the bucket based on the configured refill rate
 
@@ -428,7 +451,7 @@ The rate limiting system provides comprehensive monitoring capabilities:
 - **Integration Metrics**: Success/failure rates and wait times
 - **Configuration Changes**: Automatic updates when API limits change
 
-## 11. Performance Management
+## 12. Performance Management
 
 The system's performance can be tuned via environment variables in the `.env` file.
 
@@ -446,7 +469,34 @@ The system's performance can be tuned via environment variables in the `.env` fi
 
 Refer to the `.env.example` file for a full list of tunable parameters and example profiles for different environments.
 
-## 12. Troubleshooting
+## 13. Collaboration
+
+We welcome contributions from the community! Whether you're fixing a bug, improving documentation, or adding a new feature, your help is greatly appreciated. This project is licensed under the MIT license, which allows for broad collaboration.
+
+### How to Contribute
+
+We use the standard GitHub flow for contributions:
+
+1.  **Fork the repository**: Create your own copy of the project to work on.
+2.  **Create a new branch**: Make a new branch from `main` for your changes.
+    ```bash
+    git checkout -b feature/my-new-feature
+    ```
+3.  **Make your changes**: Implement your fix or feature. We welcome contributions to both the Python backend and the React frontend.
+4.  **Commit your changes**: Write clear, concise commit messages.
+5.  **Push to your branch**:
+    ```bash
+    git push origin feature/my-new-feature
+    ```
+6.  **Open a Pull Request**: Go to the original repository and open a pull request from your forked branch to the `main` branch. Please provide a detailed description of your changes in the pull request.
+
+### Reporting Issues
+
+If you find a bug or have a suggestion, please open an issue on GitHub. Provide as much detail as possible, including steps to reproduce the issue, so we can address it effectively.
+
+Thank you for helping make AsyncTaskFlow better!
+
+## 14. Troubleshooting
 
 - **Tasks are stuck in `PENDING`**:
     - Check worker logs: `docker compose logs -f worker`.
