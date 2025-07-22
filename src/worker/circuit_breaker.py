@@ -7,6 +7,7 @@ import pybreaker
 import httpx
 from config import settings
 from rate_limiter import wait_for_rate_limit_token
+from openrouter_state_reporter import report_openrouter_error, report_openrouter_success
 
 # Create circuit breaker instance
 openrouter_breaker = pybreaker.CircuitBreaker(
@@ -91,6 +92,16 @@ async def call_openrouter_api(
 
                 # Handle rate limiting (HTTP 429) with exponential backoff
                 if response.status_code == 429:
+                    # Report rate limiting to state management
+                    try:
+                        await report_openrouter_error(
+                            error_message="Rate limit exceeded",
+                            status_code=429,
+                            error_type="rate_limited"
+                        )
+                    except Exception:
+                        pass  # Don't fail the main operation if reporting fails
+                    
                     if attempt < max_retries - 1:  # Don't sleep on the last attempt
                         # Check for Retry-After header
                         retry_after = response.headers.get("retry-after")
@@ -118,13 +129,47 @@ async def call_openrouter_api(
 
                 # Handle other HTTP errors
                 if response.status_code != 200:
+                    # Report API error to state management
+                    try:
+                        error_type = None
+                        if response.status_code == 401:
+                            error_type = "api_key_invalid"
+                        elif response.status_code == 402:
+                            error_type = "credits_exhausted"
+                        elif response.status_code == 503:
+                            error_type = "service_unavailable"
+                        
+                        await report_openrouter_error(
+                            error_message=f"HTTP {response.status_code}: {response.text[:200]}",
+                            status_code=response.status_code,
+                            error_type=error_type
+                        )
+                    except Exception:
+                        pass  # Don't fail the main operation if reporting fails
+                    
                     # For non-rate-limit errors, don't retry here - let the circuit breaker handle it
                     raise Exception(f"OpenRouter API error: {response.status_code}")
+
+                # Success! Report to state management
+                try:
+                    await report_openrouter_success()
+                except Exception:
+                    pass  # Don't fail the main operation if reporting fails
 
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
 
         except httpx.TimeoutException:
+            # Report timeout error to state management
+            if attempt == max_retries - 1:  # Only report on final attempt
+                try:
+                    await report_openrouter_error(
+                        error_message="API request timeout",
+                        error_type="timeout"
+                    )
+                except Exception:
+                    pass
+            
             if attempt < max_retries - 1:
                 delay = calculate_backoff_delay(attempt, base_delay=2.0, max_delay=60.0)
                 await asyncio.sleep(delay)
@@ -132,6 +177,16 @@ async def call_openrouter_api(
             else:
                 raise Exception("OpenRouter API timeout after multiple attempts")
         except httpx.RequestError as e:
+            # Report network error to state management
+            if attempt == max_retries - 1:  # Only report on final attempt
+                try:
+                    await report_openrouter_error(
+                        error_message=f"Network error: {str(e)}",
+                        error_type="network_error"
+                    )
+                except Exception:
+                    pass
+            
             if attempt < max_retries - 1:
                 delay = calculate_backoff_delay(attempt, base_delay=1.0, max_delay=30.0)
                 await asyncio.sleep(delay)
@@ -139,6 +194,15 @@ async def call_openrouter_api(
             else:
                 raise Exception(f"OpenRouter API request error: {str(e)}")
 
+    # If we get here, all attempts failed - report general error
+    try:
+        await report_openrouter_error(
+            error_message="All API retry attempts failed",
+            error_type="service_unavailable"
+        )
+    except Exception:
+        pass
+    
     raise Exception("OpenRouter API call failed after all retry attempts")
 
 

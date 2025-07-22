@@ -1333,3 +1333,24 @@ redis_service: Optional[RedisService] = None
 task_service: Optional[TaskService] = None
 queue_service: Optional[QueueService] = None
 health_service: Optional[HealthService] = None
+
+
+# Dependency functions for FastAPI
+def get_redis_service() -> Optional[RedisService]:
+    """Get the global Redis service instance."""
+    return redis_service
+
+
+def get_task_service() -> Optional[TaskService]:
+    """Get the global Task service instance."""
+    return task_service
+
+
+def get_queue_service() -> Optional[QueueService]:
+    """Get the global Queue service instance."""
+    return queue_service
+
+
+def get_health_service() -> Optional[HealthService]:
+    """Get the global Health service instance."""
+    return health_service

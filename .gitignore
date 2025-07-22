@@ -1,5 +1,6 @@
 # Project Rules (keep this)
 .clinerules
+.clinebank
 
 # Environment Variables
 .env
