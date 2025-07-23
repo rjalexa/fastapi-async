@@ -18,7 +18,7 @@ app = Celery(
 app.conf.update(
     # Task routing
     task_routes={
-        'tasks.*': {'queue': 'default'},
+        'tasks.*': {'queue': 'celery'},
     },
     
     # Task serialization
@@ -63,6 +63,15 @@ app.conf.update(
             'TCP_KEEPIDLE': 1,
             'TCP_KEEPINTVL': 3,
             'TCP_KEEPCNT': 5,
+        },
+    },
+    
+    # Beat schedule for periodic tasks
+    beat_schedule={
+        'process-scheduled-tasks': {
+            'task': 'process_scheduled_tasks',
+            'schedule': 30.0,  # Run every 30 seconds
+            'options': {'queue': 'celery'}
         },
     },
 )

@@ -80,8 +80,7 @@ RETRY_SCHEDULES = {
 # --- Import Unified Celery App --------------------------------------------
 
 # Import the unified Celery app from main.py
-# This will be set when main.py imports this module
-app = None
+from main import app
 
 # --- Remote-Control Health Commands --------------------------------------
 
@@ -452,6 +451,7 @@ async def update_worker_heartbeat(redis_conn: aioredis.Redis, worker_id: str) ->
     await redis_conn.setex(heartbeat_key, 90, current_time)  # Expire after 90 seconds
 
 
+@app.task(bind=True)
 def process_task(self: Task, task_id: str) -> str:
     """
     Main task processor that handles different task types.
@@ -551,6 +551,7 @@ def process_task(self: Task, task_id: str) -> str:
 
 
 # Keep the old summarize_task for backward compatibility
+@app.task(bind=True)
 def summarize_task(self: Task, task_id: str) -> str:
     """
     Legacy summarization task - redirects to process_task.
@@ -559,6 +560,7 @@ def summarize_task(self: Task, task_id: str) -> str:
     return process_task.apply_async(args=[task_id], task_id=self.request.id).get()
 
 
+@app.task(name='process_scheduled_tasks')
 def process_scheduled_tasks() -> str:
     """
     Periodically run by Celery Beat to move scheduled tasks back to the pending queue.
