@@ -4,7 +4,7 @@
 from datetime import datetime
 from fastapi import APIRouter, Request
 
-from src.api.services import health_service
+from services import health_service
 
 router = APIRouter(prefix="/api/v1/workers", tags=["workers-management"])
 

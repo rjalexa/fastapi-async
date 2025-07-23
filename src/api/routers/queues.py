@@ -9,9 +9,9 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 import redis.asyncio as aioredis
 
-from src.api.schemas import QueueStatus, TaskDetail, QueueName
-from src.api.services import queue_service
-from src.api.config import settings
+from schemas import QueueStatus, TaskDetail, QueueName
+from services import queue_service
+from config import settings
 from fastapi import Request
 
 router = APIRouter(prefix="/api/v1/queues", tags=["queues"])
@@ -36,8 +36,8 @@ async def get_queue_status(request: Request) -> QueueStatus:
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from src.api.services import QueueService, RedisService
-        from src.api.config import settings
+        from services import QueueService, RedisService
+        from config import settings
 
         try:
             # Create a temporary service for this request
@@ -89,8 +89,8 @@ async def get_tasks_in_queue(
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from src.api.services import QueueService, RedisService
-        from src.api.config import settings
+        from services import QueueService, RedisService
+        from config import settings
 
         try:
             # Create a temporary service for this request
@@ -143,8 +143,8 @@ async def get_dlq_tasks(
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from src.api.services import QueueService, RedisService
-        from src.api.config import settings
+        from services import QueueService, RedisService
+        from config import settings
 
         try:
             # Create a temporary service for this request
@@ -200,8 +200,8 @@ async def stream_queue_status():
             if not current_queue_service:
                 # Try to get from app state as fallback
                 try:
-                    from src.api.services import QueueService, RedisService
-                    from src.api.config import settings as config_settings
+                    from services import QueueService, RedisService
+                    from config import settings as config_settings
 
                     # Create a temporary service for this request
                     temp_redis = RedisService(config_settings.redis_url)

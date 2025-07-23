@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional
 from celery import Celery
 
-from src.api.schemas import (
+from schemas import (
     TaskDetail,
     TaskResponse,
     TaskRetryRequest,
@@ -17,7 +17,7 @@ from src.api.schemas import (
     TaskType,
 )
 from datetime import datetime
-from src.api.services import TaskService
+from services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["task-management"])
 
@@ -27,7 +27,7 @@ celery_app: Celery = None
 
 def get_task_service() -> TaskService:
     """Dependency to get task service from app state."""
-    from src.api.services import task_service
+    from services import task_service
 
     # Try to get from global first
     if task_service is not None:

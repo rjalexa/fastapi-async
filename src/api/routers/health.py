@@ -4,8 +4,8 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, status
 
-from src.api.schemas import HealthStatus
-from src.api.services import health_service, HealthService
+from schemas import HealthStatus
+from services import health_service, HealthService
 
 router = APIRouter(tags=["health"])
 

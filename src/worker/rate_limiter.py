@@ -10,7 +10,7 @@ import asyncio
 import time
 from typing import Dict, Any
 import redis.asyncio as aioredis
-from src.worker.config import settings
+from config import settings
 
 
 class RedisTokenBucketRateLimiter:

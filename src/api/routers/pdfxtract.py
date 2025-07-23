@@ -6,8 +6,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from src.api.schemas import ErrorResponse, TaskResponse, TaskState, TaskType
-from src.api.services import TaskService
+from schemas import ErrorResponse, TaskResponse, TaskState, TaskType
+from services import TaskService
 
 
 def get_task_service() -> TaskService:
