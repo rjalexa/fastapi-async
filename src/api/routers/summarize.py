@@ -4,8 +4,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from celery import Celery
 
-from schemas import TaskCreate, TaskResponse, TaskState
-from services import TaskService
+from src.api.schemas import TaskCreate, TaskResponse, TaskState
+from src.api.services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks/summarize", tags=["application"])
 

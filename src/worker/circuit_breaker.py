@@ -5,9 +5,9 @@ import random
 from typing import List, Dict
 import pybreaker
 import httpx
-from config import settings
-from rate_limiter import wait_for_rate_limit_token
-from openrouter_state_reporter import report_openrouter_error, report_openrouter_success
+from src.worker.config import settings
+from src.worker.rate_limiter import wait_for_rate_limit_token
+from src.worker.openrouter_state_reporter import report_openrouter_error, report_openrouter_success
 
 # Create circuit breaker instance
 openrouter_breaker = pybreaker.CircuitBreaker(

@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import Optional
 from celery import Celery
 
-from schemas import (
+from src.api.schemas import (
     TaskDetail,
     TaskResponse,
     TaskRetryRequest,
@@ -17,7 +17,7 @@ from schemas import (
     TaskType,
 )
 from datetime import datetime
-from services import TaskService
+from src.api.services import TaskService
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["task-management"])
 

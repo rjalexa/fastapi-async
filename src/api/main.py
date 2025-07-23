@@ -8,8 +8,8 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
-from routers import (
+from src.api.config import settings
+from src.api.routers import (
     health,
     tasks,
     queues,
@@ -19,8 +19,8 @@ from routers import (
     redis,
     openrouter,
 )
-from services import RedisService, TaskService, QueueService, HealthService
-import services  # Import the module to modify globals
+from src.api.services import RedisService, TaskService, QueueService, HealthService
+import src.api.services as services  # Import the module to modify globals
 
 
 # Create Celery app for worker communication (broadcast commands)

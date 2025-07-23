@@ -58,6 +58,31 @@ class Settings(BaseSettings):
     docs_url: str = "/docs"
     redoc_url: str = "/redoc"
 
+    # Worker configuration (for Docker Compose)
+    worker_replicas: int = Field(default=1)
+    celery_worker_concurrency: int = Field(default=1)
+    worker_prefetch_multiplier: int = Field(default=1)
+    worker_memory_limit: str = Field(default="256M")
+    worker_memory_reservation: str = Field(default="128M")
+    worker_cpu_limit: float = Field(default=0.5)
+    worker_cpu_reservation: float = Field(default=0.25)
+    worker_max_tasks_per_child: int = Field(default=100)
+    worker_max_memory_per_child: int = Field(default=100000)
+    celery_task_time_limit: int = Field(default=900)
+    celery_task_soft_time_limit: int = Field(default=600)
+    celery_worker_send_task_events: bool = Field(default=True)
+    celery_task_send_sent_event: bool = Field(default=True)
+    celery_worker_disable_rate_limits: bool = Field(default=True)
+    celery_task_track_started: bool = Field(default=True)
+    worker_health_check_interval: str = Field(default="30s")
+    worker_health_check_timeout: str = Field(default="10s")
+    worker_health_check_retries: int = Field(default=3)
+    worker_health_check_start_period: str = Field(default="60s")
+    worker_stop_grace_period: str = Field(default="30s")
+    worker_log_max_size: str = Field(default="10m")
+    worker_log_max_files: int = Field(default=3)
+    flower_basic_auth: str = Field(default="admin:admin")
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": False,

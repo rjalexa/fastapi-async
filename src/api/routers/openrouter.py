@@ -9,9 +9,9 @@ import httpx
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
-from config import settings
-from services import get_redis_service
-from openrouter_state import (
+from src.api.config import settings
+from src.api.services import get_redis_service, RedisService
+from src.api.openrouter_state import (
     OpenRouterStateManager,
     OpenRouterState,
 )

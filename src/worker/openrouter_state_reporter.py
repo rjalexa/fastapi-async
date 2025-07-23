@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
-from redis_config import get_worker_standard_redis
+from src.worker.redis_config import get_worker_standard_redis
 
 
 class WorkerOpenRouterReporter:

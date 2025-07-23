@@ -9,14 +9,14 @@ from uuid import uuid4
 
 from celery import Celery
 
-from config import settings
-from redis_config import get_standard_redis, initialize_redis, close_redis
-from redis_config_simple import (
+from src.api.config import settings
+from src.api.redis_config import get_standard_redis, initialize_redis, close_redis
+from src.api.redis_config_simple import (
     initialize_simple_redis,
     close_simple_redis,
     get_simple_redis,
 )
-from schemas import (
+from src.api.schemas import (
     QueueStatus,
     TaskDetail,
     TaskState,

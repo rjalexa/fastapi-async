@@ -1,33 +1,78 @@
-"""Pytest configuration and shared fixtures."""
+"""Pytest configuration and shared fixtures for AsyncTaskFlow."""
 
+import asyncio
 import pytest
-import redis
-from unittest.mock import MagicMock
+from httpx import AsyncClient
+from unittest.mock import patch
+
+# Import the FastAPI app instance
+from src.api.main import app
+from src.worker.main import app as celery_app
+
+# Import settings from the correct location
+from src.api.config import settings
+
+# Import the real Redis client
+import redis.asyncio as redis
+
+# Import fakeredis for mocking
+from fakeredis import aioredis
 
 
-@pytest.fixture
-def mock_redis():
-    """Mock Redis client for testing."""
-    mock = MagicMock(spec=redis.Redis)
-    mock.ping.return_value = True
-    mock.hgetall.return_value = {}
-    mock.hset.return_value = True
-    mock.lpush.return_value = 1
-    mock.lpop.return_value = None
-    mock.llen.return_value = 0
-    mock.zcard.return_value = 0
-    mock.zadd.return_value = 1
-    mock.zrem.return_value = 1
-    mock.zrangebyscore.return_value = []
-    return mock
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
-@pytest.fixture
-def mock_celery_app():
-    """Mock Celery app for testing."""
-    mock = MagicMock()
-    mock.control.inspect.return_value.active_queues.return_value = {"worker1": []}
-    return mock
+@pytest.fixture(scope="session")
+async def mock_redis():
+    """Create a fakeredis instance for testing."""
+    # Create a fakeredis server
+    server = aioredis.FakeServer()
+    # Create a Redis client connected to the fake server
+    client = aioredis.FakeRedis(server=server)
+    # Ensure the connection is ready
+    await client.ping()
+    return client
+
+
+@pytest.fixture(scope="function")
+async def test_client(mock_redis):
+    """Create a test client with overridden dependencies."""
+    # Override the app's Redis dependency with our mock
+    app.dependency_overrides[src.api.redis_config.get_redis] = lambda: mock_redis
+
+    # Create and yield the test client
+    async with AsyncClient(app=app, base_url="http://test") as client:
+        yield client
+
+    # Clean up the override after the test
+    app.dependency_overrides.clear()
+
+
+# The celery_app fixture is provided by celery[pytest]
+# We can use it directly, but we'll also provide a worker fixture
+@pytest.fixture(scope="session")
+def celery_config():
+    """Configure Celery for testing."""
+    return {
+        "broker_url": "memory://",
+        "result_backend": "rpc://",
+        "task_always_eager": True,
+        "task_eager_propagates": True,
+    }
+
+
+@pytest.fixture(scope="session")
+def celery_worker_parameters():
+    """Configure Celery worker for testing."""
+    return {
+        "perform_ping_check": False,
+        "ready_timeout": 10,
+    }
 
 
 @pytest.fixture

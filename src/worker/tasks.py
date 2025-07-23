@@ -20,15 +20,15 @@ from celery import Celery, Task
 from celery.worker.control import Panel
 from pdf2image import convert_from_bytes
 
-from circuit_breaker import (
+from src.worker.circuit_breaker import (
     call_openrouter_api,
     get_circuit_breaker_status,
     reset_circuit_breaker,
     open_circuit_breaker,
 )
-from config import settings
-from prompts import load_prompt
-from redis_config import get_worker_standard_redis
+from src.worker.config import settings
+from src.worker.prompts import load_prompt
+from src.worker.redis_config import get_worker_standard_redis
 
 # --- Custom Exceptions ----------------------------------------------------
 
@@ -176,7 +176,7 @@ def classify_error(status_code: int, error_message: str) -> str:
     """Classify error as transient or permanent."""
     # First check for dependency/environment errors that should go directly to DLQ
     dependency_error_patterns = [
-        "poppler installed and in PATH",
+        "poppler installed and in path",
         "command not found",
         "no such file or directory",
         "permission denied",
@@ -423,7 +423,7 @@ async def summarize_text_with_pybreaker(content: str) -> str:
     try:
         # Check centralized OpenRouter state before attempting API call
         redis_conn = await get_async_redis_connection()
-        from openrouter_state import OpenRouterStateManager
+        from src.api.openrouter_state import OpenRouterStateManager
 
         state_manager = OpenRouterStateManager(redis_conn)
         should_skip, skip_reason = await state_manager.should_skip_api_call()
@@ -479,7 +479,7 @@ async def extract_pdf_with_pybreaker(
     try:
         # Check centralized OpenRouter state before attempting API call
         redis_conn = await get_async_redis_connection()
-        from openrouter_state import OpenRouterStateManager
+        from src.api.openrouter_state import OpenRouterStateManager
 
         state_manager = OpenRouterStateManager(redis_conn)
         should_skip, skip_reason = await state_manager.should_skip_api_call()

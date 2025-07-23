@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
-import services
+from src.api.services import RedisService
 
 router = APIRouter(prefix="/api/v1/redis", tags=["redis"])
 

@@ -5,7 +5,7 @@ import logging
 
 from celery import Celery
 
-from config import settings
+from src.worker.config import settings
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.log_level.upper()))

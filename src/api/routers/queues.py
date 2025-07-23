@@ -9,9 +9,9 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 import redis.asyncio as aioredis
 
-from schemas import QueueStatus, TaskDetail, QueueName
-from services import queue_service
-from config import settings
+from src.api.schemas import QueueStatus, TaskDetail, QueueName
+from src.api.services import queue_service, QueueService
+from src.api.config import settings
 from fastapi import Request
 
 router = APIRouter(prefix="/api/v1/queues", tags=["queues"])
