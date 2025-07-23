@@ -27,7 +27,7 @@ celery_app: Celery = None
 
 def get_task_service() -> TaskService:
     """Dependency to get task service from app state."""
-    from services import task_service
+    from src.api.services import task_service
 
     # Try to get from global first
     if task_service is not None:

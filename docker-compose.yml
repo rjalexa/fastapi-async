@@ -171,5 +171,30 @@ services:
     profiles:
       - tools
 
+  tests:
+    build:
+      context: .
+      dockerfile: ./tests/Dockerfile
+    environment:
+      - REDIS_URL=${REDIS_URL}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL}
+      - OPENROUTER_TIMEOUT=${OPENROUTER_TIMEOUT}
+      - PYTHONPATH=/app/src
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./htmlcov:/app/htmlcov
+    working_dir: /app
+    command: ["uv", "run", "python", "-m", "pytest", "-v", "--cov=src", "--cov-report=term-missing", "--cov-report=html"]
+    profiles:
+      - tools
+    labels:
+      - "com.asynctaskflow.service=tests"
+
 volumes:
   redis_data:

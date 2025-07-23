@@ -81,6 +81,21 @@ Here are some screenshots of the application in action:
   - [10. Development](#10-development)
     - [Running Locally](#running-locally)
     - [System Reset](#system-reset)
+  - [10.1. Testing](#101-testing)
+    - [Container-Based Testing Architecture](#container-based-testing-architecture)
+    - [Test Infrastructure Features](#test-infrastructure-features)
+    - [Running Tests](#running-tests)
+      - [Basic Test Execution](#basic-test-execution)
+      - [Specific Test Categories](#specific-test-categories)
+      - [Advanced Testing Options](#advanced-testing-options)
+    - [Test Coverage](#test-coverage)
+    - [Test Structure](#test-structure)
+    - [Test Environment Configuration](#test-environment-configuration)
+    - [Debugging Tests](#debugging-tests)
+    - [Continuous Integration](#continuous-integration)
+    - [Test Performance](#test-performance)
+    - [Adding New Tests](#adding-new-tests)
+    - [Test Maintenance](#test-maintenance)
   - [11. Distributed Rate Limiting](#11-distributed-rate-limiting)
     - [Overview](#overview)
     - [Key Features](#key-features-1)
@@ -345,6 +360,204 @@ docker compose run --rm reset --confirm
 ```
 
 This command is safe to run as it's isolated within the `tools` profile in `docker-compose.yml` and requires explicit confirmation.
+
+## 10.1. Testing
+
+AsyncTaskFlow includes a comprehensive containerized testing infrastructure that ensures consistent test execution across different environments. The testing system uses Docker containers to provide isolated, reproducible test environments with all necessary dependencies.
+
+### Container-Based Testing Architecture
+
+The testing infrastructure consists of:
+
+- **Dedicated Test Container**: A specialized Docker container (`tests/Dockerfile`) with all testing dependencies
+- **Isolated Test Environment**: Tests run in a clean container environment separate from development services
+- **Comprehensive Coverage**: Includes unit tests, integration tests, and coverage reporting
+- **CI/CD Ready**: Designed for both local development and continuous integration pipelines
+
+### Test Infrastructure Features
+
+- **Python 3.11 Environment**: Matches production Python version
+- **UV Package Manager**: Fast dependency resolution and installation
+- **System Dependencies**: Includes poppler-utils for PDF processing tests
+- **Coverage Reporting**: Generates both terminal and HTML coverage reports
+- **Redis Integration**: Uses FakeRedis for fast, isolated testing
+- **Async Testing Support**: Full support for async/await test patterns
+
+### Running Tests
+
+#### Basic Test Execution
+
+```bash
+# Run all tests with coverage reporting
+docker compose up --build tests
+
+# Run tests in interactive mode (useful for debugging)
+docker compose run --rm tests
+
+# Run tests and keep the container running for inspection
+docker compose run --rm tests bash
+```
+
+#### Specific Test Categories
+
+```bash
+# Run only API tests
+docker compose run --rm tests uv run python -m pytest tests/api/ -v
+
+# Run only worker tests
+docker compose run --rm tests uv run python -m pytest tests/worker/ -v
+
+# Run a specific test file
+docker compose run --rm tests uv run python -m pytest tests/api/test_api_endpoints.py -v
+
+# Run a specific test function
+docker compose run --rm tests uv run python -m pytest tests/api/test_api_endpoints.py::test_root_endpoint -v
+```
+
+#### Advanced Testing Options
+
+```bash
+# Run tests with detailed coverage report
+docker compose run --rm tests uv run python -m pytest --cov=src --cov-report=term-missing --cov-report=html -v
+
+# Run tests with specific markers (if defined)
+docker compose run --rm tests uv run python -m pytest -m "not slow" -v
+
+# Run tests with parallel execution (if pytest-xdist is installed)
+docker compose run --rm tests uv run python -m pytest -n auto
+
+# Run tests with verbose output and no capture (for debugging)
+docker compose run --rm tests uv run python -m pytest -v -s
+
+# Run tests with specific log level
+docker compose run --rm tests uv run python -m pytest --log-cli-level=DEBUG
+```
+
+### Test Coverage
+
+The testing system provides comprehensive coverage reporting:
+
+- **Terminal Coverage**: Real-time coverage statistics displayed in the terminal
+- **HTML Coverage Reports**: Detailed HTML reports generated in the `htmlcov/` directory
+- **Coverage Thresholds**: Configured to maintain minimum coverage standards (currently 80%)
+
+```bash
+# View coverage after running tests
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+```
+
+### Test Structure
+
+The test suite is organized into logical categories:
+
+```
+tests/
+├── conftest.py              # Shared test configuration and fixtures
+├── api/                     # API layer tests
+│   ├── test_api_endpoints.py    # FastAPI endpoint tests
+│   ├── test_services.py         # Service layer tests
+│   └── test_task_summaries.py   # Task summary functionality
+└── worker/                  # Worker layer tests
+    ├── test_circuit_breaker.py      # Circuit breaker functionality
+    ├── test_consumer.py             # Task consumer tests
+    ├── test_helpers.py              # Helper function tests
+    ├── test_openrouter_state_reporter.py  # State reporting tests
+    ├── test_process_task.py         # Task processing tests
+    ├── test_rate_limiter.py         # Rate limiting tests
+    ├── test_state_management.py     # State management tests
+    └── test_worker_tasks.py         # Worker task execution tests
+```
+
+### Test Environment Configuration
+
+The test environment is configured through:
+
+- **Environment Variables**: Set in `docker-compose.yml` for the tests service
+- **Test Configuration**: Managed in `tests/conftest.py`
+- **Mock Services**: Uses FakeRedis and other mocking libraries for isolation
+
+Key test environment variables:
+```yaml
+environment:
+  - REDIS_URL=redis://redis:6379/0
+  - PYTHONPATH=/app/src
+  - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+```
+
+### Debugging Tests
+
+For debugging failing tests:
+
+```bash
+# Run tests with Python debugger
+docker compose run --rm tests uv run python -m pytest --pdb
+
+# Run tests with detailed error output
+docker compose run --rm tests uv run python -m pytest --tb=long -v
+
+# Run a single test with maximum verbosity
+docker compose run --rm tests uv run python -m pytest tests/api/test_api_endpoints.py::test_root_endpoint -vvv -s
+
+# Access the test container for manual debugging
+docker compose run --rm tests bash
+# Inside container:
+# uv run python -m pytest tests/specific_test.py --pdb
+```
+
+### Continuous Integration
+
+The containerized testing approach ensures consistent behavior across different environments:
+
+- **Local Development**: Same container environment as CI/CD
+- **GitHub Actions**: Can use the same Docker-based approach
+- **Reproducible Results**: Eliminates "works on my machine" issues
+
+### Test Performance
+
+Current test suite metrics:
+- **Total Tests**: 194 tests collected
+- **Execution Time**: ~48 seconds for full suite
+- **Coverage**: 59% (target: 80%)
+- **Test Categories**: 134 passing, 60 failing (legacy issues being addressed)
+
+### Adding New Tests
+
+When adding new tests:
+
+1. **Follow the existing structure**: Place tests in appropriate directories (`api/` or `worker/`)
+2. **Use proper fixtures**: Leverage shared fixtures from `conftest.py`
+3. **Mock external dependencies**: Use FakeRedis and other mocks for isolation
+4. **Test both success and failure cases**: Ensure comprehensive coverage
+5. **Use descriptive test names**: Make test purposes clear
+
+Example test structure:
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+
+@pytest.mark.asyncio
+async def test_task_creation_success(test_client):
+    """Test successful task creation with proper validation."""
+    # Test implementation
+    pass
+
+@pytest.mark.asyncio 
+async def test_task_creation_validation_error(test_client):
+    """Test task creation with invalid input data."""
+    # Test implementation
+    pass
+```
+
+### Test Maintenance
+
+Regular test maintenance includes:
+- **Updating dependencies**: Keep testing libraries current
+- **Fixing flaky tests**: Address intermittent test failures
+- **Improving coverage**: Add tests for uncovered code paths
+- **Performance optimization**: Keep test execution time reasonable
+
+The containerized approach ensures that test maintenance efforts benefit all developers and deployment environments consistently.
 
 ## 11. Distributed Rate Limiting
 

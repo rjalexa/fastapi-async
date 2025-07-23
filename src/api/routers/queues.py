@@ -36,8 +36,8 @@ async def get_queue_status(request: Request) -> QueueStatus:
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from services import QueueService, RedisService
-        from config import settings
+        from src.api.services import QueueService, RedisService
+        from src.api.config import settings
 
         try:
             # Create a temporary service for this request
@@ -89,8 +89,8 @@ async def get_tasks_in_queue(
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from services import QueueService, RedisService
-        from config import settings
+        from src.api.services import QueueService, RedisService
+        from src.api.config import settings
 
         try:
             # Create a temporary service for this request
@@ -143,8 +143,8 @@ async def get_dlq_tasks(
 
     if not current_queue_service:
         # Try to get from app state as fallback
-        from services import QueueService, RedisService
-        from config import settings
+        from src.api.services import QueueService, RedisService
+        from src.api.config import settings
 
         try:
             # Create a temporary service for this request
@@ -193,15 +193,15 @@ async def stream_queue_status():
 
             # Send initial queue status
             # Import services module to get the current queue service
-            import services
+            import src.api.services as services
 
             current_queue_service = services.queue_service
 
             if not current_queue_service:
                 # Try to get from app state as fallback
                 try:
-                    from services import QueueService, RedisService
-                    from config import settings as config_settings
+                    from src.api.services import QueueService, RedisService
+                    from src.api.config import settings as config_settings
 
                     # Create a temporary service for this request
                     temp_redis = RedisService(config_settings.redis_url)

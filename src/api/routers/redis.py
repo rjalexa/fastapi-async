@@ -16,6 +16,8 @@ async def get_redis_pool_stats() -> Dict[str, Any]:
     Returns detailed information about the current state of the Redis connection pool,
     including connection counts, utilization, and health status.
     """
+    from src.api import services
+    
     if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
 
@@ -58,6 +60,8 @@ async def get_redis_health() -> Dict[str, Any]:
     Returns basic health information about the Redis connection,
     including connectivity status and response time.
     """
+    from src.api import services
+    
     if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
 

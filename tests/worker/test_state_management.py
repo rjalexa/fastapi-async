@@ -30,7 +30,11 @@ class TestUpdateTaskState:
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        mock_redis.pipeline.return_value = mock_pipeline
+        
+        # Make pipeline() return the mock directly, not a coroutine
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
         
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
@@ -61,7 +65,9 @@ class TestUpdateTaskState:
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        mock_redis.pipeline.return_value = mock_pipeline
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
         
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
@@ -101,7 +107,9 @@ class TestUpdateTaskState:
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        mock_redis.pipeline.return_value = mock_pipeline
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
         
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
@@ -140,7 +148,9 @@ class TestUpdateTaskState:
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        mock_redis.pipeline.return_value = mock_pipeline
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
         
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
@@ -191,7 +201,9 @@ class TestUpdateTaskState:
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        mock_redis.pipeline.return_value = mock_pipeline
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
         
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
@@ -214,10 +226,17 @@ class TestUpdateTaskState:
         """Test that queue updates are published correctly."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {"state": "PENDING"}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
+        
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -243,10 +262,17 @@ class TestUpdateTaskState:
         """Test that publish failures don't break state updates."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        def mock_pipeline_method(*args, **kwargs):
+            return mock_pipeline
+        mock_redis.pipeline = mock_pipeline_method
+        
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish.side_effect = Exception("Redis publish failed")
@@ -256,7 +282,7 @@ class TestUpdateTaskState:
         await update_task_state(mock_redis, task_id, "ACTIVE")
 
         # Verify hset was still called despite publish failure
-        mock_redis.hset.assert_called_once()
+        mock_pipeline.hset.assert_called_once()
 
 
 class TestMoveToDlq:
@@ -267,10 +293,15 @@ class TestMoveToDlq:
         """Test basic DLQ movement functionality."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -286,8 +317,8 @@ class TestMoveToDlq:
         mock_redis.lpush.assert_called_once_with("dlq:tasks", task_id)
 
         # Verify state was updated
-        mock_redis.hset.assert_called_once()
-        mapping = mock_redis.hset.call_args[1]["mapping"]
+        mock_pipeline.hset.assert_called_once()
+        mapping = mock_pipeline.hset.call_args[1]["mapping"]
         assert mapping["state"] == "DLQ"
         assert mapping["last_error"] == reason
         assert mapping["error_type"] == error_type
@@ -297,10 +328,15 @@ class TestMoveToDlq:
         """Test DLQ movement with default error type."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -312,7 +348,7 @@ class TestMoveToDlq:
         await move_to_dlq(mock_redis, task_id, reason)
 
         # Verify default error type was used
-        mapping = mock_redis.hset.call_args[1]["mapping"]
+        mapping = mock_pipeline.hset.call_args[1]["mapping"]
         assert mapping["error_type"] == "Unknown"
 
 
