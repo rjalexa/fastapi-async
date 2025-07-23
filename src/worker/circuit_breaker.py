@@ -7,7 +7,10 @@ import pybreaker
 import httpx
 from src.worker.config import settings
 from src.worker.rate_limiter import wait_for_rate_limit_token
-from src.worker.openrouter_state_reporter import report_openrouter_error, report_openrouter_success
+from src.worker.openrouter_state_reporter import (
+    report_openrouter_error,
+    report_openrouter_success,
+)
 
 # Create circuit breaker instance
 openrouter_breaker = pybreaker.CircuitBreaker(
@@ -266,21 +269,9 @@ def get_circuit_breaker_status() -> dict:
 
 
 def reset_circuit_breaker():
-    """Manually reset the circuit breaker."""
+    """Manually reset (close) the circuit breaker."""
     try:
-        # Try different reset methods based on pybreaker version
-        if hasattr(openrouter_breaker, "reset"):
-            openrouter_breaker.reset()
-        elif hasattr(openrouter_breaker, "_reset"):
-            openrouter_breaker._reset()
-        else:
-            # Manual reset by setting state and counters
-            if hasattr(openrouter_breaker, "_failure_count"):
-                openrouter_breaker._failure_count = 0
-            if hasattr(openrouter_breaker, "_state_storage"):
-                openrouter_breaker._state_storage.state = "closed"
-            elif hasattr(openrouter_breaker, "_state"):
-                openrouter_breaker._state = "closed"
+        openrouter_breaker.close()
         return True
     except Exception as e:
         raise Exception(f"Failed to reset circuit breaker: {str(e)}")
@@ -289,22 +280,7 @@ def reset_circuit_breaker():
 def open_circuit_breaker():
     """Manually open the circuit breaker."""
     try:
-        # Force the circuit breaker to open by simulating failures
-        # Set the failure counter to exceed the threshold
-        if hasattr(openrouter_breaker, "_failure_count"):
-            openrouter_breaker._failure_count = openrouter_breaker.fail_max + 1
-
-        # Try to trigger the state change by calling the failure method
-        try:
-            # This will force the circuit breaker to open
-            openrouter_breaker._on_failure()
-        except Exception:
-            # If that doesn't work, try setting the state directly
-            if hasattr(openrouter_breaker, "_state_storage"):
-                openrouter_breaker._state_storage.state = "open"
-            elif hasattr(openrouter_breaker, "_state"):
-                openrouter_breaker._state = "open"
-
+        openrouter_breaker.open()
         return True
     except Exception as e:
         raise Exception(f"Failed to open circuit breaker: {str(e)}")

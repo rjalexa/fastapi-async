@@ -1,6 +1,5 @@
 """Comprehensive tests for all API endpoints."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -52,15 +51,21 @@ def test_task_creation_and_management(test_client: TestClient):
 def test_task_list_endpoints(test_client: TestClient):
     """Test listing tasks by status."""
     # Test listing pending tasks
-    response = test_client.get("/api/v1/tasks/", params={"status": "PENDING", "limit": 10})
+    response = test_client.get(
+        "/api/v1/tasks/", params={"status": "PENDING", "limit": 10}
+    )
     assert response.status_code == 200
 
     # Test listing completed tasks
-    response = test_client.get("/api/v1/tasks/", params={"status": "COMPLETED", "limit": 10})
+    response = test_client.get(
+        "/api/v1/tasks/", params={"status": "COMPLETED", "limit": 10}
+    )
     assert response.status_code == 200
 
     # Test listing failed tasks
-    response = test_client.get("/api/v1/tasks/", params={"status": "FAILED", "limit": 10})
+    response = test_client.get(
+        "/api/v1/tasks/", params={"status": "FAILED", "limit": 10}
+    )
     assert response.status_code == 200
 
     # Test listing all tasks
@@ -108,7 +113,9 @@ def test_error_conditions(test_client: TestClient):
     assert response.status_code == 404
 
     # Test invalid task creation payload
-    response = test_client.post("/api/v1/tasks/summarize/", json={"invalid_field": "test"})
+    response = test_client.post(
+        "/api/v1/tasks/summarize/", json={"invalid_field": "test"}
+    )
     assert response.status_code == 422
 
     # Test invalid queue name

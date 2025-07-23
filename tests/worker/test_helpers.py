@@ -1,8 +1,11 @@
 """Tests for worker utility and helper functions."""
 
-import pytest
 from unittest.mock import patch
-from src.worker.tasks import classify_error, calculate_retry_delay, calculate_adaptive_retry_ratio
+from src.worker.tasks import (
+    classify_error,
+    calculate_retry_delay,
+    calculate_adaptive_retry_ratio,
+)
 
 
 class TestClassifyError:
@@ -25,14 +28,18 @@ class TestClassifyError:
             "database connection failed",
             "redis connection failed",
         ]
-        
+
         for pattern in dependency_patterns:
             result = classify_error(0, pattern)
-            assert result == "DependencyError", f"Pattern '{pattern}' should be classified as DependencyError"
-            
+            assert (
+                result == "DependencyError"
+            ), f"Pattern '{pattern}' should be classified as DependencyError"
+
             # Test case insensitive matching
             result = classify_error(0, pattern.upper())
-            assert result == "DependencyError", f"Pattern '{pattern.upper()}' should be classified as DependencyError"
+            assert (
+                result == "DependencyError"
+            ), f"Pattern '{pattern.upper()}' should be classified as DependencyError"
 
     def test_permanent_error_patterns(self):
         """Test that permanent error patterns are correctly classified."""
@@ -54,10 +61,12 @@ class TestClassifyError:
             "quota exceeded",
             "limit exceeded",
         ]
-        
+
         for pattern in permanent_patterns:
             result = classify_error(0, pattern)
-            assert result == "PermanentError", f"Pattern '{pattern}' should be classified as PermanentError"
+            assert (
+                result == "PermanentError"
+            ), f"Pattern '{pattern}' should be classified as PermanentError"
 
     def test_http_status_code_classifications(self):
         """Test that HTTP status codes are correctly classified."""
@@ -65,7 +74,9 @@ class TestClassifyError:
         permanent_codes = [400, 401, 403, 404]
         for code in permanent_codes:
             result = classify_error(code, "some error message")
-            assert result == "PermanentError", f"Status code {code} should be classified as PermanentError"
+            assert (
+                result == "PermanentError"
+            ), f"Status code {code} should be classified as PermanentError"
 
         # Test insufficient credits
         result = classify_error(402, "some error message")
@@ -83,13 +94,15 @@ class TestClassifyError:
         transient_codes = [500]
         for code in transient_codes:
             result = classify_error(code, "some error message")
-            assert result == "NetworkTimeout", f"Status code {code} should be classified as NetworkTimeout"
+            assert (
+                result == "NetworkTimeout"
+            ), f"Status code {code} should be classified as NetworkTimeout"
 
     def test_default_fallback(self):
         """Test that unknown errors fall back to Default classification."""
         result = classify_error(0, "some unknown error")
         assert result == "Default"
-        
+
         result = classify_error(418, "I'm a teapot")  # Unusual status code
         assert result == "Default"
 
@@ -100,12 +113,12 @@ class TestCalculateRetryDelay:
     def test_insufficient_credits_schedule(self):
         """Test retry delays for insufficient credits."""
         expected_schedule = [300, 600, 1800]  # 5min, 10min, 30min
-        
+
         for retry_count, expected_base in enumerate(expected_schedule):
             delay = calculate_retry_delay(retry_count, "InsufficientCredits")
             # Should be base delay + jitter (0-10% of base)
             assert expected_base <= delay <= expected_base * 1.1
-        
+
         # Test beyond schedule length - should use last value
         delay = calculate_retry_delay(10, "InsufficientCredits")
         assert 1800 <= delay <= 1800 * 1.1
@@ -113,7 +126,7 @@ class TestCalculateRetryDelay:
     def test_rate_limit_schedule(self):
         """Test retry delays for rate limit errors."""
         expected_schedule = [120, 300, 600, 1200]  # 2min, 5min, 10min, 20min
-        
+
         for retry_count, expected_base in enumerate(expected_schedule):
             delay = calculate_retry_delay(retry_count, "RateLimitError")
             assert expected_base <= delay <= expected_base * 1.1
@@ -121,7 +134,7 @@ class TestCalculateRetryDelay:
     def test_service_unavailable_schedule(self):
         """Test retry delays for service unavailable errors."""
         expected_schedule = [5, 10, 30, 60, 120]
-        
+
         for retry_count, expected_base in enumerate(expected_schedule):
             delay = calculate_retry_delay(retry_count, "ServiceUnavailable")
             assert expected_base <= delay <= expected_base * 1.1
@@ -129,7 +142,7 @@ class TestCalculateRetryDelay:
     def test_network_timeout_schedule(self):
         """Test retry delays for network timeout errors."""
         expected_schedule = [2, 5, 10, 30, 60]
-        
+
         for retry_count, expected_base in enumerate(expected_schedule):
             delay = calculate_retry_delay(retry_count, "NetworkTimeout")
             assert expected_base <= delay <= expected_base * 1.1
@@ -137,7 +150,7 @@ class TestCalculateRetryDelay:
     def test_default_schedule(self):
         """Test retry delays for default error type."""
         expected_schedule = [5, 15, 60, 300]
-        
+
         for retry_count, expected_base in enumerate(expected_schedule):
             delay = calculate_retry_delay(retry_count, "Default")
             assert expected_base <= delay <= expected_base * 1.1
@@ -153,10 +166,10 @@ class TestCalculateRetryDelay:
         for _ in range(10):
             delay = calculate_retry_delay(0, "Default")
             delays.append(delay)
-        
+
         # All delays should be different due to jitter
         assert len(set(delays)) > 1, "Jitter should make delays different"
-        
+
         # All delays should be within expected range
         for delay in delays:
             assert 5 <= delay <= 5.5
@@ -165,13 +178,13 @@ class TestCalculateRetryDelay:
 class TestCalculateAdaptiveRetryRatio:
     """Test the calculate_adaptive_retry_ratio function."""
 
-    @patch('src.worker.tasks.settings')
+    @patch("src.worker.tasks.settings")
     def test_normal_queue_depth(self, mock_settings):
         """Test retry ratio when queue depth is normal."""
         mock_settings.retry_queue_warning = 100
         mock_settings.retry_queue_critical = 500
         mock_settings.default_retry_ratio = 0.3
-        
+
         # Test below warning threshold
         ratio = calculate_adaptive_retry_ratio(50)
         assert ratio == 0.3
@@ -179,13 +192,13 @@ class TestCalculateAdaptiveRetryRatio:
         ratio = calculate_adaptive_retry_ratio(99)
         assert ratio == 0.3
 
-    @patch('src.worker.tasks.settings')
+    @patch("src.worker.tasks.settings")
     def test_warning_queue_depth(self, mock_settings):
         """Test retry ratio when queue depth is at warning level."""
         mock_settings.retry_queue_warning = 100
         mock_settings.retry_queue_critical = 500
         mock_settings.default_retry_ratio = 0.3
-        
+
         # Test at warning threshold
         ratio = calculate_adaptive_retry_ratio(100)
         assert ratio == 0.2
@@ -196,13 +209,13 @@ class TestCalculateAdaptiveRetryRatio:
         ratio = calculate_adaptive_retry_ratio(499)
         assert ratio == 0.2
 
-    @patch('src.worker.tasks.settings')
+    @patch("src.worker.tasks.settings")
     def test_critical_queue_depth(self, mock_settings):
         """Test retry ratio when queue depth is at critical level."""
         mock_settings.retry_queue_warning = 100
         mock_settings.retry_queue_critical = 500
         mock_settings.default_retry_ratio = 0.3
-        
+
         # Test at critical threshold
         ratio = calculate_adaptive_retry_ratio(500)
         assert ratio == 0.1
@@ -210,13 +223,13 @@ class TestCalculateAdaptiveRetryRatio:
         ratio = calculate_adaptive_retry_ratio(1000)
         assert ratio == 0.1
 
-    @patch('src.worker.tasks.settings')
+    @patch("src.worker.tasks.settings")
     def test_edge_cases(self, mock_settings):
         """Test edge cases for queue depth."""
         mock_settings.retry_queue_warning = 100
         mock_settings.retry_queue_critical = 500
         mock_settings.default_retry_ratio = 0.3
-        
+
         # Test zero depth
         ratio = calculate_adaptive_retry_ratio(0)
         assert ratio == 0.3

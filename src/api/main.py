@@ -43,7 +43,9 @@ celery_app.conf.update(
 )
 
 
-async def initialize_services() -> tuple[RedisService, TaskService, QueueService, HealthService]:
+async def initialize_services() -> (
+    tuple[RedisService, TaskService, QueueService, HealthService]
+):
     """Initialize all services and return them."""
     print(f"Initializing services in process {os.getpid()}")
 

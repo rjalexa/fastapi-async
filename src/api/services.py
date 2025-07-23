@@ -421,7 +421,12 @@ class TaskService:
 
             if not all_tasks:
                 return TaskListResponse(
-                    tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0, status=status
+                    tasks=[],
+                    page=1,
+                    page_size=page_size,
+                    total_items=0,
+                    total_pages=0,
+                    status=status,
                 )
 
             # Apply other filters to substring matches
@@ -545,7 +550,12 @@ class TaskService:
         # If no tasks found, return empty result
         if not all_tasks:
             return TaskListResponse(
-                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0, status=status
+                tasks=[],
+                page=page,
+                page_size=page_size,
+                total_items=0,
+                total_pages=0,
+                status=status,
             )
 
         # Filtering
@@ -584,7 +594,12 @@ class TaskService:
         # If no tasks after filtering, return empty result
         if not filtered_tasks:
             return TaskListResponse(
-                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0, status=status
+                tasks=[],
+                page=page,
+                page_size=page_size,
+                total_items=0,
+                total_pages=0,
+                status=status,
             )
 
         # Sorting
@@ -660,7 +675,11 @@ class TaskService:
 
             try:
                 retry_count_val = task_data.get("retry_count", "0")
-                retry_count = int(retry_count_val) if isinstance(retry_count_val, (str, int)) else 0
+                retry_count = (
+                    int(retry_count_val)
+                    if isinstance(retry_count_val, (str, int))
+                    else 0
+                )
             except (ValueError, TypeError):
                 retry_count = 0
 
@@ -770,7 +789,12 @@ class TaskService:
 
             if not all_tasks:
                 return TaskSummaryListResponse(
-                    tasks=[], page=1, page_size=page_size, total_items=0, total_pages=0, status=status
+                    tasks=[],
+                    page=1,
+                    page_size=page_size,
+                    total_items=0,
+                    total_pages=0,
+                    status=status,
                 )
 
             # Apply other filters to substring matches
@@ -857,7 +881,11 @@ class TaskService:
 
                 try:
                     retry_count_val = task_data.get("retry_count", "0")
-                    retry_count = int(retry_count_val) if isinstance(retry_count_val, (str, int)) else 0
+                    retry_count = (
+                        int(retry_count_val)
+                        if isinstance(retry_count_val, (str, int))
+                        else 0
+                    )
                 except (ValueError, TypeError):
                     retry_count = 0
 
@@ -924,7 +952,12 @@ class TaskService:
         # If no tasks found, return empty result
         if not all_tasks:
             return TaskSummaryListResponse(
-                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0, status=status
+                tasks=[],
+                page=page,
+                page_size=page_size,
+                total_items=0,
+                total_pages=0,
+                status=status,
             )
 
         # Filtering
@@ -963,7 +996,12 @@ class TaskService:
         # If no tasks after filtering, return empty result
         if not filtered_tasks:
             return TaskSummaryListResponse(
-                tasks=[], page=page, page_size=page_size, total_items=0, total_pages=0, status=status
+                tasks=[],
+                page=page,
+                page_size=page_size,
+                total_items=0,
+                total_pages=0,
+                status=status,
             )
 
         # Sorting
@@ -1030,7 +1068,11 @@ class TaskService:
 
             try:
                 retry_count_val = task_data.get("retry_count", "0")
-                retry_count = int(retry_count_val) if isinstance(retry_count_val, (str, int)) else 0
+                retry_count = (
+                    int(retry_count_val)
+                    if isinstance(retry_count_val, (str, int))
+                    else 0
+                )
             except (ValueError, TypeError):
                 retry_count = 0
 
@@ -1039,13 +1081,21 @@ class TaskService:
             except (ValueError, TypeError):
                 max_retries = settings.max_retries
 
-            created_at = parse_iso_date_summary(task_data.get("created_at")) or datetime.min
-            updated_at = parse_iso_date_summary(task_data.get("updated_at")) or datetime.min
+            created_at = (
+                parse_iso_date_summary(task_data.get("created_at")) or datetime.min
+            )
+            updated_at = (
+                parse_iso_date_summary(task_data.get("updated_at")) or datetime.min
+            )
             completed_at = parse_iso_date_summary(task_data.get("completed_at"))
             retry_after = parse_iso_date_summary(task_data.get("retry_after"))
 
-            error_history = parse_json_field_summary_main(task_data.get("error_history"))
-            state_history = parse_json_field_summary_main(task_data.get("state_history"))
+            error_history = parse_json_field_summary_main(
+                task_data.get("error_history")
+            )
+            state_history = parse_json_field_summary_main(
+                task_data.get("state_history")
+            )
 
             task_type_str = task_data.get("task_type", TaskType.SUMMARIZE.value)
             try:

@@ -2,15 +2,13 @@
 
 import pytest
 import json
-import time
 from datetime import datetime
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from src.worker.tasks import (
     update_task_state,
     move_to_dlq,
     schedule_task_for_retry,
     update_worker_heartbeat,
-    PermanentError,
     TransientError,
 )
 
@@ -23,19 +21,16 @@ class TestUpdateTaskState:
         """Test basic state update functionality."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        
-        # Make pipeline() return the mock directly, not a coroutine
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -58,17 +53,15 @@ class TestUpdateTaskState:
         """Test that state-specific timestamps are added correctly."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -100,17 +93,15 @@ class TestUpdateTaskState:
         """Test that error history is created and updated correctly."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {"state": "PENDING"}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -141,17 +132,15 @@ class TestUpdateTaskState:
         """Test that retry timestamps are created correctly."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {"state": "FAILED"}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -194,17 +183,15 @@ class TestUpdateTaskState:
             "state": "PENDING",
             "retry_timestamps": json.dumps(existing_retry_data),
         }
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -226,17 +213,15 @@ class TestUpdateTaskState:
         """Test that queue updates are published correctly."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {"state": "PENDING"}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
-        def mock_pipeline_method(*args, **kwargs):
-            return mock_pipeline
-        mock_redis.pipeline = mock_pipeline_method
-        
+        mock_redis.pipeline.return_value = mock_pipeline
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -262,17 +247,19 @@ class TestUpdateTaskState:
         """Test that publish failures don't break state updates."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
         mock_pipeline.__aexit__ = AsyncMock(return_value=None)
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
+
         def mock_pipeline_method(*args, **kwargs):
             return mock_pipeline
+
         mock_redis.pipeline = mock_pipeline_method
-        
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish.side_effect = Exception("Redis publish failed")
@@ -293,7 +280,7 @@ class TestMoveToDlq:
         """Test basic DLQ movement functionality."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
@@ -301,7 +288,7 @@ class TestMoveToDlq:
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
         mock_redis.pipeline.return_value = mock_pipeline
-        
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -328,7 +315,7 @@ class TestMoveToDlq:
         """Test DLQ movement with default error type."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        
+
         # Create a proper async context manager mock
         mock_pipeline = AsyncMock()
         mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
@@ -336,7 +323,7 @@ class TestMoveToDlq:
         mock_pipeline.hset = AsyncMock()
         mock_pipeline.execute = AsyncMock()
         mock_redis.pipeline.return_value = mock_pipeline
-        
+
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -360,10 +347,13 @@ class TestScheduleTaskForRetry:
         """Test basic retry scheduling functionality."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -373,13 +363,15 @@ class TestScheduleTaskForRetry:
         retry_count = 2
         exc = TransientError("API temporarily unavailable")
 
-        with patch("src.worker.tasks.time.time", return_value=1000.0), \
-             patch("src.worker.tasks.calculate_retry_delay", return_value=60.0):
-
+        with patch("src.worker.tasks.time.time", return_value=1000.0), patch(
+            "src.worker.tasks.calculate_retry_delay", return_value=60.0
+        ):
             await schedule_task_for_retry(mock_redis, task_id, retry_count, exc)
 
             # Verify task was added to scheduled set with correct timestamp
-            mock_redis.zadd.assert_called_once_with("tasks:scheduled", {task_id: 1060.0})
+            mock_redis.zadd.assert_called_once_with(
+                "tasks:scheduled", {task_id: 1060.0}
+            )
 
             # Verify state was updated
             mock_redis.hset.assert_called_once()
@@ -393,10 +385,13 @@ class TestScheduleTaskForRetry:
         """Test retry scheduling with exception that has status code."""
         mock_redis = AsyncMock()
         mock_redis.hgetall.return_value = {}
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -407,10 +402,9 @@ class TestScheduleTaskForRetry:
         exc = TransientError("Rate limited")
         exc.status_code = 429
 
-        with patch("src.worker.tasks.time.time", return_value=2000.0), \
-             patch("src.worker.tasks.calculate_retry_delay", return_value=120.0), \
-             patch("src.worker.tasks.classify_error", return_value="RateLimitError"):
-
+        with patch("src.worker.tasks.time.time", return_value=2000.0), patch(
+            "src.worker.tasks.calculate_retry_delay", return_value=120.0
+        ), patch("src.worker.tasks.classify_error", return_value="RateLimitError"):
             await schedule_task_for_retry(mock_redis, task_id, retry_count, exc)
 
             # Verify error classification was called with status code
@@ -474,10 +468,13 @@ class TestErrorHistoryAndRetryTimestamps:
             "state": "SCHEDULED",
             "error_history": json.dumps(existing_error_history),
         }
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()
@@ -510,10 +507,13 @@ class TestErrorHistoryAndRetryTimestamps:
             "state": "PENDING",
             "error_history": "invalid json",
         }
-        mock_redis.pipeline.return_value.__aenter__.return_value = mock_redis
-        mock_redis.pipeline.return_value.__aexit__.return_value = None
-        mock_redis.hset = AsyncMock()
-        mock_redis.execute = AsyncMock()
+        # Create a proper async context manager mock
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = AsyncMock()
+        mock_pipeline.execute = AsyncMock()
+        mock_redis.pipeline.return_value = mock_pipeline
         mock_redis.llen.return_value = 10
         mock_redis.zcard.return_value = 5
         mock_redis.publish = AsyncMock()

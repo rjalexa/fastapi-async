@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 import redis.asyncio as aioredis
 
 from src.api.schemas import QueueStatus, TaskDetail, QueueName
-from src.api.services import queue_service, QueueService
+from src.api.services import queue_service
 from src.api.config import settings
 from fastapi import Request
 

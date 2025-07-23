@@ -1,9 +1,6 @@
 """Tests for circuit breaker functionality."""
 
 import pytest
-import pytest_asyncio
-import asyncio
-import os
 from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 import httpx
 
@@ -30,21 +27,21 @@ class TestBackoffDelay:
         """Test exponential growth of backoff delay."""
         delay1 = calculate_backoff_delay(1, base_delay=1.0, max_delay=100.0)
         delay2 = calculate_backoff_delay(2, base_delay=1.0, max_delay=100.0)
-        
+
         # Should grow exponentially (with jitter, so approximate)
         assert delay2 > delay1
 
     def test_calculate_backoff_delay_max_cap(self):
         """Test that backoff delay is capped at max_delay."""
         delay = calculate_backoff_delay(10, base_delay=1.0, max_delay=5.0)
-        
+
         # Should be around max_delay (with jitter)
         assert delay <= 5.0 * 1.25  # Max delay + 25% jitter
 
     def test_calculate_backoff_delay_minimum(self):
         """Test that backoff delay respects minimum."""
         delay = calculate_backoff_delay(0, base_delay=2.0)
-        
+
         # Should be at least base_delay
         assert delay >= 2.0
 
@@ -54,7 +51,7 @@ class TestBackoffDelay:
         for _ in range(10):
             delay = calculate_backoff_delay(3, base_delay=1.0, max_delay=100.0)
             delays.append(delay)
-        
+
         # Should have some variation due to jitter
         assert len(set(delays)) > 1
 
@@ -68,7 +65,7 @@ class TestContainerId:
 12:memory:/docker/1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 11:cpu:/docker/1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
 """
-        
+
         with patch("builtins.open", mock_open(read_data=mock_cgroup_content)):
             container_id = get_container_id()
             assert container_id == "1234567890ab"  # First 12 chars
@@ -78,25 +75,26 @@ class TestContainerId:
         mock_cgroup_content = """
 12:memory:/system.slice/docker-abcdef123456.scope
 """
-        
+
         with patch("builtins.open", mock_open(read_data=mock_cgroup_content)):
             container_id = get_container_id()
             assert container_id == "abcdef123456"
 
     def test_get_container_id_fallback_hostname(self):
         """Test fallback to hostname when cgroup fails."""
-        with patch("builtins.open", side_effect=FileNotFoundError), \
-             patch("os.uname") as mock_uname:
+        with patch("builtins.open", side_effect=FileNotFoundError), patch(
+            "os.uname"
+        ) as mock_uname:
             mock_uname.return_value.nodename = "test-hostname-123"
-            
+
             container_id = get_container_id()
             assert container_id == "test-hostname"  # First 12 chars
 
     def test_get_container_id_final_fallback(self):
         """Test final fallback when everything fails."""
-        with patch("builtins.open", side_effect=FileNotFoundError), \
-             patch("os.uname", side_effect=Exception("No uname")):
-            
+        with patch("builtins.open", side_effect=FileNotFoundError), patch(
+            "os.uname", side_effect=Exception("No uname")
+        ):
             container_id = get_container_id()
             assert container_id == "unknown"
 
@@ -107,7 +105,7 @@ class TestCircuitBreakerStatus:
     def test_get_circuit_breaker_status_basic(self):
         """Test getting basic circuit breaker status."""
         status = get_circuit_breaker_status()
-        
+
         assert "state" in status
         assert "container_id" in status
         assert isinstance(status["state"], str)
@@ -115,7 +113,7 @@ class TestCircuitBreakerStatus:
     def test_get_circuit_breaker_status_with_counters(self):
         """Test circuit breaker status includes counters."""
         status = get_circuit_breaker_status()
-        
+
         # Should have fail_count and success_count
         assert "fail_count" in status
         assert "success_count" in status
@@ -127,9 +125,9 @@ class TestCircuitBreakerStatus:
         """Test circuit breaker status error handling."""
         mock_breaker.current_state = None
         mock_breaker.side_effect = Exception("Test error")
-        
+
         status = get_circuit_breaker_status()
-        
+
         assert status["state"] == "error"
         assert "error" in status
 
@@ -139,69 +137,27 @@ class TestCircuitBreakerControl:
 
     def test_reset_circuit_breaker_success(self):
         """Test successful circuit breaker reset."""
-        with patch.object(openrouter_breaker, 'reset') as mock_reset:
+        with patch.object(openrouter_breaker, "close") as mock_close:
             result = reset_circuit_breaker()
-            
-            assert result is True
-            mock_reset.assert_called_once()
 
-    def test_reset_circuit_breaker_fallback_methods(self):
-        """Test circuit breaker reset with fallback methods."""
-        # Mock the breaker to not have reset method
-        with patch.object(openrouter_breaker, 'reset', side_effect=AttributeError), \
-             patch.object(openrouter_breaker, '_reset') as mock_private_reset:
-            
-            result = reset_circuit_breaker()
-            
             assert result is True
-            mock_private_reset.assert_called_once()
-
-    def test_reset_circuit_breaker_manual_reset(self):
-        """Test manual circuit breaker reset when methods don't exist."""
-        # Mock the breaker to not have reset methods
-        with patch.object(openrouter_breaker, 'reset', side_effect=AttributeError), \
-             patch.object(openrouter_breaker, '_reset', side_effect=AttributeError):
-            
-            # Add mock attributes for manual reset
-            openrouter_breaker._failure_count = 5
-            openrouter_breaker._state = "open"
-            
-            result = reset_circuit_breaker()
-            
-            assert result is True
-            assert openrouter_breaker._failure_count == 0
+            mock_close.assert_called_once()
 
     def test_reset_circuit_breaker_error(self):
         """Test circuit breaker reset error handling."""
-        with patch.object(openrouter_breaker, 'reset', side_effect=Exception("Reset failed")):
-            
+        with patch.object(
+            openrouter_breaker, "close", side_effect=Exception("Reset failed")
+        ):
             with pytest.raises(Exception, match="Failed to reset circuit breaker"):
                 reset_circuit_breaker()
 
     def test_open_circuit_breaker_success(self):
         """Test manually opening circuit breaker."""
-        # Mock the breaker attributes
-        openrouter_breaker.fail_max = 5
-        openrouter_breaker._failure_count = 0
-        
-        with patch.object(openrouter_breaker, '_on_failure') as mock_on_failure:
+        with patch.object(openrouter_breaker, "open") as mock_open:
             result = open_circuit_breaker()
-            
-            assert result is True
-            assert openrouter_breaker._failure_count == 6  # fail_max + 1
-            mock_on_failure.assert_called_once()
 
-    def test_open_circuit_breaker_fallback(self):
-        """Test opening circuit breaker with fallback method."""
-        openrouter_breaker.fail_max = 5
-        
-        with patch.object(openrouter_breaker, '_on_failure', side_effect=Exception):
-            openrouter_breaker._state = "closed"
-            
-            result = open_circuit_breaker()
-            
             assert result is True
-            assert openrouter_breaker._state == "open"
+            mock_open.assert_called_once()
 
 
 class TestCallOpenrouterApi:
@@ -211,23 +167,24 @@ class TestCallOpenrouterApi:
     async def test_call_openrouter_api_success(self):
         """Test successful OpenRouter API call."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Test response"}}]
         }
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_success") as mock_report_success:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_success"
+        ) as mock_report_success:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.return_value = mock_response
-            
+
             result = await call_openrouter_api(messages)
-            
+
             assert result == "Test response"
             mock_report_success.assert_called_once()
 
@@ -235,9 +192,10 @@ class TestCallOpenrouterApi:
     async def test_call_openrouter_api_rate_limit_timeout(self):
         """Test API call when rate limit token acquisition times out."""
         messages = [{"role": "user", "content": "Test message"}]
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=False):
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=False
+        ):
             with pytest.raises(Exception, match="Rate limit token acquisition timeout"):
                 await call_openrouter_api(messages)
 
@@ -245,30 +203,33 @@ class TestCallOpenrouterApi:
     async def test_call_openrouter_api_rate_limited(self):
         """Test API call handling rate limiting (429)."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         # First response is rate limited, second is successful
         mock_response_429 = MagicMock()
         mock_response_429.status_code = 429
         mock_response_429.headers = {"retry-after": "60"}
-        
+
         mock_response_200 = MagicMock()
         mock_response_200.status_code = 200
         mock_response_200.json.return_value = {
             "choices": [{"message": {"content": "Success after retry"}}]
         }
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("asyncio.sleep") as mock_sleep, \
-             patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error, \
-             patch("src.worker.circuit_breaker.report_openrouter_success") as mock_report_success:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "asyncio.sleep"
+        ) as mock_sleep, patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ) as mock_report_error, patch(
+            "src.worker.circuit_breaker.report_openrouter_success"
+        ) as mock_report_success:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = [mock_response_429, mock_response_200]
-            
+
             result = await call_openrouter_api(messages)
-            
+
             assert result == "Success after retry"
             mock_sleep.assert_called()  # Should have slept due to rate limiting
             mock_report_error.assert_called()
@@ -278,88 +239,94 @@ class TestCallOpenrouterApi:
     async def test_call_openrouter_api_http_error(self):
         """Test API call with HTTP error."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ) as mock_report_error:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.return_value = mock_response
-            
+
             with pytest.raises(Exception, match="OpenRouter API error: 500"):
                 await call_openrouter_api(messages)
-            
+
             mock_report_error.assert_called()
 
     @pytest.mark.asyncio
     async def test_call_openrouter_api_timeout(self):
         """Test API call with timeout."""
         messages = [{"role": "user", "content": "Test message"}]
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("asyncio.sleep") as mock_sleep, \
-             patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "asyncio.sleep"
+        ), patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ) as mock_report_error:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = httpx.TimeoutException("Request timeout")
-            
+
             with pytest.raises(Exception, match="OpenRouter API timeout"):
                 await call_openrouter_api(messages)
-            
+
             mock_report_error.assert_called()
 
     @pytest.mark.asyncio
     async def test_call_openrouter_api_network_error(self):
         """Test API call with network error."""
         messages = [{"role": "user", "content": "Test message"}]
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ) as mock_report_error:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = httpx.RequestError("Network error")
-            
+
             with pytest.raises(Exception, match="OpenRouter API request error"):
                 await call_openrouter_api(messages)
-            
+
             mock_report_error.assert_called()
 
     @pytest.mark.asyncio
     async def test_call_openrouter_api_specific_error_codes(self):
         """Test API call with specific error codes."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         test_cases = [
             (401, "api_key_invalid"),
             (402, "credits_exhausted"),
             (503, "service_unavailable"),
         ]
-        
+
         for status_code, expected_error_type in test_cases:
             mock_response = MagicMock()
             mock_response.status_code = status_code
             mock_response.text = f"Error {status_code}"
-            
-            with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-                 patch("httpx.AsyncClient") as mock_client_class, \
-                 patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error:
-                
+
+            with patch(
+                "src.worker.circuit_breaker.wait_for_rate_limit_token",
+                return_value=True,
+            ), patch("httpx.AsyncClient") as mock_client_class, patch(
+                "src.worker.circuit_breaker.report_openrouter_error"
+            ) as mock_report_error:
                 mock_client = AsyncMock()
                 mock_client_class.return_value.__aenter__.return_value = mock_client
                 mock_client.post.return_value = mock_response
-                
+
                 with pytest.raises(Exception):
                     await call_openrouter_api(messages)
-                
+
                 # Verify the error was reported with correct error type
                 mock_report_error.assert_called()
                 call_args = mock_report_error.call_args[1]
@@ -379,20 +346,21 @@ class TestCircuitBreakerIntegration:
     async def test_circuit_breaker_with_api_call(self):
         """Test circuit breaker behavior with API calls."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         # Mock a failing response
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Server Error"
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_error"):
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ):
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.return_value = mock_response
-            
+
             # Should raise exception due to 500 error
             with pytest.raises(Exception):
                 await call_openrouter_api(messages)
@@ -402,11 +370,11 @@ class TestCircuitBreakerIntegration:
         # Reset breaker to known state
         try:
             reset_circuit_breaker()
-        except:
+        except Exception:
             pass
-        
+
         status = get_circuit_breaker_status()
-        
+
         # Should have basic status information
         assert "state" in status
         assert "container_id" in status
@@ -420,18 +388,19 @@ class TestErrorReporting:
     async def test_error_reporting_integration(self):
         """Test that errors are properly reported."""
         messages = [{"role": "user", "content": "Test message"}]
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_error") as mock_report_error:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_error"
+        ) as mock_report_error:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.side_effect = httpx.TimeoutException("Timeout")
-            
+
             with pytest.raises(Exception):
                 await call_openrouter_api(messages)
-            
+
             # Verify error reporting was called
             mock_report_error.assert_called()
 
@@ -439,22 +408,23 @@ class TestErrorReporting:
     async def test_success_reporting_integration(self):
         """Test that successes are properly reported."""
         messages = [{"role": "user", "content": "Test message"}]
-        
+
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "Success"}}]
         }
-        
-        with patch("src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True), \
-             patch("httpx.AsyncClient") as mock_client_class, \
-             patch("src.worker.circuit_breaker.report_openrouter_success") as mock_report_success:
-            
+
+        with patch(
+            "src.worker.circuit_breaker.wait_for_rate_limit_token", return_value=True
+        ), patch("httpx.AsyncClient") as mock_client_class, patch(
+            "src.worker.circuit_breaker.report_openrouter_success"
+        ) as mock_report_success:
             mock_client = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_client
             mock_client.post.return_value = mock_response
-            
+
             result = await call_openrouter_api(messages)
-            
+
             assert result == "Success"
             mock_report_success.assert_called_once()

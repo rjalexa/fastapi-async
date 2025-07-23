@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from src.api.config import settings
-from src.api.services import get_redis_service, RedisService
+from src.api.services import get_redis_service
 from src.api.openrouter_state import (
     OpenRouterStateManager,
     OpenRouterState,

@@ -5,8 +5,17 @@ This starts the Redis queue consumer that pulls task IDs and dispatches them to 
 """
 
 import logging
+import os
+import random
 import signal
+import socket
 import sys
+import time
+import uuid
+
+import redis
+from .config import settings
+from .tasks import app as celery_app, calculate_adaptive_retry_ratio
 
 # Configure logging
 logging.basicConfig(
@@ -30,23 +39,12 @@ def main():
     logger.info("Starting AsyncTaskFlow Redis Queue Consumer")
 
     try:
-        # Import the consumer logic directly
-        import redis
-        import random
-        import time
-        import os
-        from config import settings
-        from tasks import app as celery_app, calculate_adaptive_retry_ratio
-
         logger.info("Starting Redis queue consumer...")
 
         # Use synchronous Redis for BLPOP
         redis_conn = redis.from_url(settings.redis_url, decode_responses=True)
 
         # Generate unique worker ID for heartbeat
-        import socket
-        import uuid
-
         hostname = socket.gethostname()
         unique_suffix = str(uuid.uuid4())[:8]  # Short UUID for uniqueness
         worker_id = f"worker-{hostname}-{os.getpid()}-{unique_suffix}"

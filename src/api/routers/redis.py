@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
-from src.api.services import RedisService
 
 router = APIRouter(prefix="/api/v1/redis", tags=["redis"])
 
@@ -17,7 +16,7 @@ async def get_redis_pool_stats() -> Dict[str, Any]:
     including connection counts, utilization, and health status.
     """
     from src.api import services
-    
+
     if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
 
@@ -61,7 +60,7 @@ async def get_redis_health() -> Dict[str, Any]:
     including connectivity status and response time.
     """
     from src.api import services
-    
+
     if not services.redis_service:
         raise HTTPException(status_code=503, detail="Redis service not available")
 

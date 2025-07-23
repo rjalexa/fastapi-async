@@ -14,12 +14,8 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     # Celery Configuration
-    celery_broker_url: str = Field(
-        default="redis://localhost:6379/0"
-    )
-    celery_result_backend: str = Field(
-        default="redis://localhost:6379/0"
-    )
+    celery_broker_url: str = Field(default="redis://localhost:6379/0")
+    celery_result_backend: str = Field(default="redis://localhost:6379/0")
 
     # Task Processing Configuration
     default_retry_ratio: float = Field(default=0.3)
@@ -31,20 +27,14 @@ class Settings(BaseSettings):
     retry_queue_critical: int = Field(default=5000)
 
     # Circuit Breaker Configuration
-    circuit_failure_threshold: float = Field(
-        default=0.5
-    )
+    circuit_failure_threshold: float = Field(default=0.5)
     circuit_volume_threshold: int = Field(default=10)
     circuit_timeout: int = Field(default=60)
 
     # OpenRouter Configuration
     openrouter_api_key: Optional[str] = Field(default=None)
-    openrouter_base_url: str = Field(
-        default="https://openrouter.ai/api/v1"
-    )
-    openrouter_model: str = Field(
-        default="meta-llama/llama-3.2-90b-text-preview"
-    )
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
+    openrouter_model: str = Field(default="meta-llama/llama-3.2-90b-text-preview")
     openrouter_timeout: int = Field(default=30)
 
     # Development Configuration
